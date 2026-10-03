@@ -13,7 +13,7 @@ The system combines clinical tabular machine learning with local TreeSHAP explai
 
 ## Stenosis Target Definition
 
-In this project, the vessel-level target represents stenosis at or above **≥50% luminal narrowing**, validated via invasive coronary catheterization angiography:
+In this project, the vessel-level target represents stenosis of **≥50% luminal narrowing**, validated via invasive coronary catheterization angiography:
 
 - **CAD**: Presence of significant coronary artery disease (≥50% luminal narrowing in ≥1 major epicardial vessel), derived from `Cath == 'CAD'`.
 - **LAD**: Left Anterior Descending artery stenosis (≥50% luminal narrowing).
@@ -31,7 +31,8 @@ Input Validation (Pydantic Schema)
         ↓
 Leakage-Safe Preprocessing (ColumnTransformer)
         ↓
-Target-Specific ML Models (Random Forest & XGBoost)
+Target-Specific ML Models
+(CAD/LAD: Random Forest | LCX/RCA: XGBoost)
         ↓
 CAD + LAD + LCX + RCA Probabilities
         ↓
@@ -179,10 +180,15 @@ CardioVision AI implements authentic TreeSHAP (Tree-based SHapley Additive exPla
 
 - **Target-Specific Explainers**: Pre-computed `TreeExplainer` instances exist for CAD, LAD, LCX, and RCA.
 - **Mathematical Output Space Distinction**:
-  - **Random Forest Targets (CAD, LAD)**: Explain continuous probability space. Local feature attributions sum additively with the base expected rate $\mathbb{E}[f(x)]$ to equal the model probability output:
-    $$\text{Probability} = \mathbb{E}[f(x)] + \sum_{i=1}^{60} \phi_i$$
+  - **Random Forest Targets (CAD, LAD)**: Explain continuous probability space. Local feature attributions sum additively with the base expected rate E[f(x)] to equal the model probability output:
+    ```
+    Probability = E[f(x)] + Σᵢ φᵢ
+    ```
   - **XGBoost Targets (LCX, RCA)**: Explain margin (raw log-odds) space. Local feature attributions sum to the total margin, which converts to probability via the standard logistic sigmoid:
-    $$\text{Margin} = \mathbb{E}[f(x)] + \sum_{i=1}^{60} \phi_i \quad\longrightarrow\quad \text{Probability} = \sigma(\text{Margin})$$
+    ```
+    Margin = E[f(x)] + Σᵢ φᵢ
+    Probability = σ(Margin)
+    ```
 - **60-Feature Resolution**: All 60 transformed features have exact one-to-one name mapping. An interactive search and toggle allows reviewing all 60 attributions.
 - **Direction & Magnitude**: Features are ranked strictly by absolute attribution magnitude ($|\phi_i|$). Signs indicate whether a feature pushes the prediction toward stenosis ($+$) or away from stenosis ($-$) relative to the training distribution.
 - **Attribution vs Causation Boundary**:
@@ -223,7 +229,7 @@ The 3D visualization is an interactive anatomical reference built with Three.js 
 
 ## Limitations
 
-- **Small Cohort**: Retrospective dataset of 303 patients from a single medical center.
+- **Small Cohort**: The dataset contains 303 patient records.
 - **Internal Evaluation Only**: Validated using 5-fold cross-validation and an 80/20 holdout split. No external validation on outside cohorts, clinics, or imaging systems was performed.
 - **Vessel-Level vs System-Level Performance**: Branch-level stenosis performance (Holdout ROC-AUC: LAD 76.7%, LCX 68.6%, RCA 70.2%) is lower than overall CAD detection (Holdout ROC-AUC: 86.6%), reflecting the greater difficulty of localized branch estimation from non-invasive features.
 - **Probabilistic Estimates**: Outputs represent statistical model probabilities, not physical luminal measurements.
@@ -235,20 +241,24 @@ The 3D visualization is an interactive anatomical reference built with Three.js 
 
 ## Development Environment & AI-Assisted Engineering
 
-CardioVision AI was engineered using modern tooling and an agentic workflow:
+CardioVision AI was developed using an AI-assisted software engineering workflow:
 
-- **Antigravity IDE** was used as the primary development environment for building, debugging, iterating, and integrating the CardioVision AI application.
-- AI-assisted development was used to accelerate implementation and refinement, while the final application behavior, model outputs, evaluation metrics, validation methodology, and safety claims are based on the implemented project artifacts.
-- Persisted pipelines and models are serialized using `joblib` in `backend/models/`.
-- The FastAPI backend is served via Uvicorn on port 8000.
-- The interactive frontend is built using React 18 and Vite on port 5173, utilizing Three.js and React Three Fiber for 3D scene rendering.
+- **Primary IDE**: Antigravity IDE
+- **AI-Assisted Development**: Used for implementation, code generation, debugging, iterative refinement, integration, and project workflow.
+- **Backend Development**: Python, FastAPI, Pydantic, Uvicorn
+- **ML Development**: Scikit-learn, XGBoost, SHAP, NumPy, Pandas, Joblib
+- **Frontend Development**: React, Vite, Tailwind CSS, Axios
+- **3D Development**: Three.js, React Three Fiber, Drei, React Three Postprocessing
+- **Model Persistence**: Joblib artifacts stored in `backend/models/`
+
+Antigravity IDE was used as the primary development environment and AI-assisted engineering workspace. The IDE itself is not the prediction engine; model training and inference are performed by the project's Python ML pipeline.
 
 ---
 
 ## Tech Stack
 
 ### Development Environment
-- **IDE**: Antigravity IDE (AI-assisted coding, workspace orchestration, browser testing)
+- **IDE**: Antigravity IDE (AI-assisted development and project workflow)
 
 ### Backend
 - **Language**: Python 3.10+
