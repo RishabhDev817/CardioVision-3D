@@ -11,35 +11,58 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: #F8FAFC;
+  color: #0F172A;
+  background-image: 
+    radial-gradient(circle at 12% 10%, rgba(37, 99, 235, 0.025) 0%, transparent 45%),
+    radial-gradient(circle at 88% 18%, rgba(225, 29, 72, 0.02) 0%, transparent 40%),
+    radial-gradient(circle at 50% 80%, rgba(13, 148, 136, 0.02) 0%, transparent 50%),
+    url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%230f766e' stroke-width='1.0' stroke-linecap='round' opacity='0.03'%3E%3Cpath d='M21 24h6M24 21v6'/%3E%3C/g%3E%3Ccircle cx='24' cy='24' r='0.6' fill='%231e3a8a' opacity='0.025'/%3E%3C/svg%3E");
+  background-size: 100% 100%, 100% 100%, 100% 100%, 48px 48px;
+  background-attachment: fixed;
 }
 
-/* Clean Medical Scrollbar */
+/* Authentic Hospital-Grade Medical Pattern Overlay */
+.medical-pattern-bg {
+  position: relative;
+}
+
+.medical-pattern-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%230f766e' stroke-width='1.0' stroke-linecap='round' opacity='0.03'%3E%3Cpath d='M17 20h6M20 17v6'/%3E%3C/g%3E%3Ccircle cx='20' cy='20' r='0.5' fill='%232563eb' opacity='0.025'/%3E%3C/svg%3E");
+  background-size: 40px 40px;
+  opacity: 1;
+}
+
+/* Refined Medical Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #F1F5F9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #CBD5E1;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #94A3B8;
 }
 
-/* Hospital Clean Card Helpers */
+/* Premium Medical Cards */
 .hospital-card {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
-  border-radius: 0.75rem;
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+  border-radius: 0.875rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .hospital-card-hover {
@@ -47,6 +70,50 @@ body {
 }
 
 .hospital-card-hover:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  border-color: #CBD5E1;
+  box-shadow: 0 6px 16px -2px rgba(15, 23, 42, 0.07), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
+}
+
+/* Holographic Medical Projection Keyframe Animations */
+@keyframes hologram-float {
+  0%, 100% {
+    transform: translateY(0px) scale(1.02);
+  }
+  50% {
+    transform: translateY(-7px) scale(1.04);
+  }
+}
+
+.animate-hologram-float {
+  animation: hologram-float 4.5s ease-in-out infinite;
+}
+
+@keyframes hologram-pulse-glow {
+  0%, 100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.animate-hologram-glow {
+  animation: hologram-pulse-glow 3s ease-in-out infinite;
+}
+
+/* Subtle Print Styles */
+@media print {
+  header, footer, nav, .no-print {
+    display: none !important;
+  }
+  body {
+    background: #FFFFFF !important;
+    background-image: none !important;
+    color: #000000 !important;
+  }
+  .hospital-card {
+    box-shadow: none !important;
+    border: 1px solid #CCCCCC !important;
+    break-inside: avoid;
+  }
 }

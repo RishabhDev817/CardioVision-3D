@@ -1,49 +1,59 @@
 import React, { useRef, useState, useMemo, useEffect, Suspense } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Html, useGLTF } from '@react-three/drei';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { OrbitControls, Html, useGLTF, Environment } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
+
+// Reference Asset Pipeline: Configured for medical reference illustrations & textures
+export const REFERENCE_ASSET_PIPELINE = {
+  ready: true,
+  referenceDir: '/images/reference/',
+  referenceAssetPath: '/images/reference/heart-reference.png',
+  anatomyGuide: {
+    view: 'Anterior Standard Anatomical Reference',
+    orientation: 'Upright front-facing (Aorta & Pulmonary Trunk superior, Apex inferior)',
+    proportions: 'Full organ framing with margin clearance for clinical overlays',
+  }
+};
+
 import { 
   Activity, 
   RotateCw, 
   Eye, 
   EyeOff, 
   Layers, 
-  Sun, 
-  Moon, 
   Heart, 
   Compass, 
   Lock, 
   Unlock,
   ZoomIn,
   ZoomOut,
-  Sparkles,
-  Info
 } from 'lucide-react';
 
-// Exact Risk-based color threshold mapping:
-// Low risk (< 30%): Medical Emerald (#059669)
-// Moderate risk (30% - 70%): Amber Gold (#d97706)
-// High risk (> 70%): Clinical Crimson (#dc2626)
+// Authoritative Project-wide Risk-based color threshold mapping:
+// Low risk (< 35%): Medical Emerald (#059669)
+// Moderate risk (35% to < 65%): Amber Gold (#d97706)
+// High risk (≥ 65%): Clinical Crimson (#dc2626)
+// Pending / Unassessed: Neutral Slate (#94a3b8)
 export const getRiskColor = (prob) => {
   if (prob === undefined || prob === null || isNaN(prob)) return '#94a3b8';
-  if (prob < 0.30) return '#059669'; // Medical Emerald
-  if (prob <= 0.70) return '#d97706'; // Amber Gold
+  if (prob < 0.35) return '#059669'; // Medical Emerald
+  if (prob < 0.65) return '#d97706'; // Amber Gold
   return '#dc2626'; // Clinical Crimson
 };
 
 export const getRiskTier = (prob) => {
   if (prob === undefined || prob === null || isNaN(prob)) return 'Pending';
-  if (prob < 0.30) return 'Low';
-  if (prob <= 0.70) return 'Moderate';
+  if (prob < 0.35) return 'Low';
+  if (prob < 0.65) return 'Moderate';
   return 'High';
 };
 
-// Controlled Semantic Vessel Colors:
-// LAD = coral/red (#f43f5e)
-// LCX = teal/emerald (#0d9488)
+// Controlled Semantic Vessel Colors according to CardioVision design specification:
+// LAD = rose (#f43f5e)
+// LCX = teal (#0d9488)
 // RCA = orange (#f97316)
-// CAD = rose-crimson (#e11d48)
+// CAD = red (#e11d48)
 export const VESSEL_COLORS = {
   LAD: '#f43f5e',
   LCX: '#0d9488',
@@ -100,12 +110,11 @@ function CameraFocusController({
       return;
     }
 
-    const t = Math.min(1.0, delta * 3.6);
+    const t = Math.min(1.0, delta * 3.8);
     state.camera.position.lerp(targetPos, t);
     controlsRef.current.target.lerp(targetLookAt, t);
     controlsRef.current.update();
 
-    // End transition when close enough so user can freely orbit/zoom without snapback
     if (
       state.camera.position.distanceTo(targetPos) < 0.025 &&
       controlsRef.current.target.distanceTo(targetLookAt) < 0.025
@@ -120,7 +129,95 @@ function CameraFocusController({
   return null;
 }
 
-// 3D Anatomical Organ Model with MeshPhysicalMaterial & Post-processing Bloom
+// Ensure OrbitControls target stays smoothly anchored at cardiac center
+function DynamicCameraFitter({ controlsRef }) {
+  useEffect(() => {
+    if (controlsRef?.current) {
+      controlsRef.current.target.set(0, 0, 0);
+      controlsRef.current.minDistance = 2.5;
+      controlsRef.current.maxDistance = 12.0;
+      controlsRef.current.update();
+    }
+  }, [controlsRef]);
+
+  return null;
+}
+
+// Procedural Cardiac Myofibril Normal Map Generator
+// Generates realistic directional striated muscle fiber fascicles and micro-grooves
+function createMuscleFibersTexture() {
+  if (typeof document === 'undefined') return null;
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  const heightData = new Float32Array(size * size);
+
+  for (let y = 0; y < size; y++) {
+    const ny = y / size;
+    for (let x = 0; x < size; x++) {
+      const nx = x / size;
+
+      // Primary muscle fiber angle (striations running downward with gentle curvature)
+      const u = nx * 36.0 + Math.sin(ny * 7.5) * 2.2;
+      const v = ny * 14.0;
+
+      // High-frequency myofibril striation waves
+      const f1 = Math.sin(u * Math.PI * 2.0);
+      const f2 = Math.sin((u * 2.0 + ny * 12.0) * Math.PI) * 0.42;
+      const f3 = Math.cos((nx * 5.0 + ny * 38.0) * Math.PI) * 0.22;
+
+      // Micro cross-striations
+      const crossFibers = Math.sin(v * Math.PI * 4.0) * 0.14;
+
+      const h = (f1 + f2 + f3 + crossFibers + 1.8) / 3.6;
+      heightData[y * size + x] = Math.max(0, Math.min(1, h));
+    }
+  }
+
+  // Convert heightmap to Tangent-Space Normal Map (Sobel filter)
+  const imgData = ctx.createImageData(size, size);
+  const data = imgData.data;
+  const strength = 3.6;
+
+  for (let y = 0; y < size; y++) {
+    const yTop = (y - 1 + size) % size;
+    const yBot = (y + 1) % size;
+
+    for (let x = 0; x < size; x++) {
+      const xLeft = (x - 1 + size) % size;
+      const xRight = (x + 1) % size;
+
+      const dx = (heightData[y * size + xRight] - heightData[y * size + xLeft]) * strength;
+      const dy = (heightData[yBot * size + x] - heightData[yTop * size + x]) * strength;
+
+      const nz = 1.0;
+      const len = Math.hypot(dx, dy, nz);
+      const nx = -dx / len;
+      const nyVec = -dy / len;
+      const nzv = nz / len;
+
+      const idx = (y * size + x) * 4;
+      data[idx] = Math.round((nx * 0.5 + 0.5) * 255);
+      data[idx + 1] = Math.round((nyVec * 0.5 + 0.5) * 255);
+      data[idx + 2] = Math.round((nzv * 0.5 + 0.5) * 255);
+      data[idx + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(4, 4);
+  return texture;
+}
+
+// 3D Anatomical Organ Model with Medical-Art Studio Rendering
 function AnatomicalHeartScene({
   ladProb = null,
   lcxProb = null,
@@ -136,144 +233,182 @@ function AnatomicalHeartScene({
   const groupRef = useRef();
   const [hoveredVessel, setHoveredVessel] = useState(null);
 
-  // Load high-fidelity anatomical GLTF/GLB heart model
+  // Load seamless anatomical GLTF/GLB heart model
   const { scene } = useGLTF('/models/heart.glb');
 
-  // Vessel base colors: semantic colors when prediction exists, neutral gray when pending
-  const ladBaseColor = useMemo(() => new THREE.Color(ladProb != null ? VESSEL_COLORS.LAD : '#94a3b8'), [ladProb]);
-  const lcxBaseColor = useMemo(() => new THREE.Color(lcxProb != null ? VESSEL_COLORS.LCX : '#94a3b8'), [lcxProb]);
-  const rcaBaseColor = useMemo(() => new THREE.Color(rcaProb != null ? VESSEL_COLORS.RCA : '#94a3b8'), [rcaProb]);
+  // Procedural myocardial muscle striations
+  const muscleNormalMap = useMemo(() => createMuscleFibersTexture(), []);
 
-  // Determine bloom-triggering emission intensity based on live prediction probability and selection state
-  // Visual intensity represents model-predicted probability, not measured anatomical severity
+  // Emission intensity: restrained resting state (0.10) for clear contrast without neon halos,
+  // controlled highlight (0.45) when selected
   const getVesselEmissive = (prob, isSelected, isHovered) => {
-    if (prob == null) {
-      return isSelected ? 0.45 : 0.0;
-    }
-    // Live probability available:
     if (isSelected) {
-      return 1.25 + prob * 0.75; // Highlighted vessel blooms visibly
+      return 0.45; // Refined, clean clinical highlight without blinding flare
     }
     if (isHovered) {
-      return 0.95 + prob * 0.45;
+      return 0.28;
     }
     if (selectedVessel) {
-      // Non-selected vessels return to calm state while selected vessel is emphasized
-      return 0.12 + prob * 0.22;
+      return 0.06; // Slightly recessed when another vessel is selected
     }
-    // Neutral overview: subtle emissive proportional to model probability
-    return 0.22 + prob * 0.65;
+    return 0.10; // Subtle resting emissive contrast against darker myocardium
   };
 
-  // High-Gloss PBR materials with clearcoat and specular sheen
+  // Medical-Art PBR materials matching the stylized 3D medical illustration
   const materials = useMemo(() => {
+    const ladColor = ladProb != null ? getRiskColor(ladProb) : VESSEL_COLORS.LAD;
+    const lcxColor = lcxProb != null ? getRiskColor(lcxProb) : VESSEL_COLORS.LCX;
+    const rcaColor = rcaProb != null ? getRiskColor(rcaProb) : VESSEL_COLORS.RCA;
+
     return {
+      // LAD: Left Anterior Descending Artery (#f43f5e)
       LAD: new THREE.MeshStandardMaterial({
-        color: ladBaseColor,
-        roughness: 0.15,
-        metalness: 0.25,
-        emissive: ladBaseColor,
+        color: new THREE.Color(ladColor),
+        roughness: 0.30,
+        metalness: 0.04,
+        emissive: new THREE.Color(ladColor),
         emissiveIntensity: getVesselEmissive(ladProb, selectedVessel === 'LAD', hoveredVessel === 'LAD'),
         wireframe: xrayMode,
+        polygonOffset: true,
+        polygonOffsetFactor: -1.0,
+        polygonOffsetUnits: -2.0,
       }),
+
+      // LCX: Left Circumflex Artery (#0d9488)
       LCX: new THREE.MeshStandardMaterial({
-        color: lcxBaseColor,
-        roughness: 0.15,
-        metalness: 0.25,
-        emissive: lcxBaseColor,
+        color: new THREE.Color(lcxColor),
+        roughness: 0.30,
+        metalness: 0.04,
+        emissive: new THREE.Color(lcxColor),
         emissiveIntensity: getVesselEmissive(lcxProb, selectedVessel === 'LCX', hoveredVessel === 'LCX'),
         wireframe: xrayMode,
+        polygonOffset: true,
+        polygonOffsetFactor: -1.0,
+        polygonOffsetUnits: -2.0,
       }),
+
+      // RCA: Right Coronary Artery (#f97316)
       RCA: new THREE.MeshStandardMaterial({
-        color: rcaBaseColor,
-        roughness: 0.15,
-        metalness: 0.25,
-        emissive: rcaBaseColor,
+        color: new THREE.Color(rcaColor),
+        roughness: 0.30,
+        metalness: 0.04,
+        emissive: new THREE.Color(rcaColor),
         emissiveIntensity: getVesselEmissive(rcaProb, selectedVessel === 'RCA', hoveredVessel === 'RCA'),
         wireframe: xrayMode,
+        polygonOffset: true,
+        polygonOffsetFactor: -1.0,
+        polygonOffsetUnits: -2.0,
       }),
 
-      // Hyper-Realistic Biological Material (MeshPhysicalMaterial) for Living Heart Muscle
-      Myocardium: new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color('#991b1b'),
-        roughness: 0.25,
-        metalness: 0.08,
-        transmission: 0.4,
-        thickness: 1.5,
-        ior: 1.45,
-        clearcoat: 0.6,
-        clearcoatRoughness: 0.15,
-        attenuationColor: new THREE.Color('#b91c1c'),
-        attenuationDistance: 1.2,
-        transparent: true,
+      // Ventricles / Myocardium: Vibrant living crimson with striated muscle fiber normal map
+      Myocardium: new THREE.MeshStandardMaterial({
+        color: new THREE.Color('#C62828'),
+        normalMap: muscleNormalMap,
+        normalScale: new THREE.Vector2(0.55, 0.55),
+        roughness: 0.44,
+        metalness: 0.02,
+        transparent: xrayMode,
         opacity: xrayMode ? 0.35 : 1.0,
       }),
 
-      Atria: new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color('#881337'),
-        roughness: 0.28,
-        metalness: 0.08,
-        transmission: 0.35,
-        thickness: 1.3,
-        ior: 1.45,
-        clearcoat: 0.5,
-        transparent: true,
+      // Auricles (Atrial Appendages): Deep plum/wine fleshy folds matching reference illustration
+      Auricles: new THREE.MeshStandardMaterial({
+        color: new THREE.Color('#5C1D27'),
+        roughness: 0.50,
+        metalness: 0.0,
+        transparent: xrayMode,
         opacity: xrayMode ? 0.35 : 1.0,
       }),
 
-      // Ascending Aorta Arch
-      Aorta: new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color('#fecdd3'),
-        roughness: 0.22,
-        metalness: 0.12,
-        transmission: 0.25,
-        thickness: 0.8,
-        ior: 1.40,
-        clearcoat: 0.4,
-        transparent: true,
-        opacity: xrayMode ? 0.45 : 1.0,
+      // Atria: Deep crimson upper chambers
+      Atria: new THREE.MeshStandardMaterial({
+        color: new THREE.Color('#782836'),
+        roughness: 0.48,
+        metalness: 0.0,
+        transparent: xrayMode,
+        opacity: xrayMode ? 0.35 : 1.0,
       }),
 
-      // Pulmonary Trunk
-      PulmonaryArtery: new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color('#0284c7'),
+      // Aorta & Arch Branches: Vibrant arterial scarlet red with glossy sheen and hollow lumen interior
+      Aorta: new THREE.MeshStandardMaterial({
+        color: new THREE.Color('#E53935'),
         roughness: 0.24,
-        metalness: 0.12,
-        transmission: 0.25,
-        thickness: 0.8,
-        ior: 1.40,
-        clearcoat: 0.4,
-        transparent: true,
-        opacity: xrayMode ? 0.45 : 1.0,
-      }),
-
-      VenaCava: new THREE.MeshStandardMaterial({
-        color: new THREE.Color('#1e3a8a'),
-        roughness: 0.32,
-        metalness: 0.10,
+        metalness: 0.04,
+        side: THREE.DoubleSide,
         transparent: xrayMode,
         opacity: xrayMode ? 0.45 : 1.0,
       }),
 
+      // Pulmonary Trunk & Arteries: Vibrant royal clinical blue with hollow lumen interior
+      PulmonaryArtery: new THREE.MeshStandardMaterial({
+        color: new THREE.Color('#1565C0'),
+        roughness: 0.24,
+        metalness: 0.04,
+        side: THREE.DoubleSide,
+        transparent: xrayMode,
+        opacity: xrayMode ? 0.45 : 1.0,
+      }),
+
+      // Vena Cava (SVC/IVC): Royal clinical blue with hollow lumen interior
+      VenaCava: new THREE.MeshStandardMaterial({
+        color: new THREE.Color('#1565C0'),
+        roughness: 0.26,
+        metalness: 0.04,
+        side: THREE.DoubleSide,
+        transparent: xrayMode,
+        opacity: xrayMode ? 0.45 : 1.0,
+      }),
+
+      // Cardiac Surface Veins: Royal blue venules running across myocardium
+      CardiacVeins: new THREE.MeshStandardMaterial({
+        color: new THREE.Color('#1565C0'),
+        roughness: 0.28,
+        metalness: 0.04,
+        transparent: xrayMode,
+        opacity: xrayMode ? 0.45 : 1.0,
+      }),
+
+      // Epicardial Sulcal Adipose Tissue (Fat Pads)
       EpicardialFat: new THREE.MeshStandardMaterial({
-        color: new THREE.Color('#fef08a'),
-        roughness: 0.65,
-        metalness: 0.05,
+        color: new THREE.Color('#E2C4A2'),
+        roughness: 0.70,
+        metalness: 0.0,
         transparent: true,
-        opacity: xrayMode ? 0.15 : 0.85,
+        opacity: xrayMode ? 0.20 : 0.85,
       }),
     };
-  }, [ladBaseColor, lcxBaseColor, rcaBaseColor, ladProb, lcxProb, rcaProb, selectedVessel, hoveredVessel, xrayMode]);
+  }, [ladProb, lcxProb, rcaProb, selectedVessel, hoveredVessel, xrayMode, muscleNormalMap]);
 
   // Clone scene for clean material mapping
   const clonedScene = useMemo(() => scene.clone(true), [scene]);
+  const modelRef = useRef();
 
-  // Traverse scene graph to assign hyper-realistic materials
+  // Automatic Bounding Box Centering using THREE.Box3
+  useEffect(() => {
+    if (modelRef.current) {
+      modelRef.current.position.set(0, 0, 0);
+      modelRef.current.updateMatrixWorld(true);
+
+      const box = new THREE.Box3().setFromObject(modelRef.current);
+      const center = box.getCenter(new THREE.Vector3());
+
+      // Center the model group precisely at coordinate [0, 0, 0]
+      modelRef.current.position.x = -center.x;
+      modelRef.current.position.y = -center.y;
+      modelRef.current.position.z = -center.z;
+    }
+  }, [scene, clonedScene]);
+
+  // Traverse scene graph to compute smooth vertex normals and assign materials
   useEffect(() => {
     clonedScene.traverse((node) => {
       if (node.isMesh) {
         node.castShadow = true;
         node.receiveShadow = true;
+
+        if (node.geometry) {
+          node.geometry.computeVertexNormals();
+        }
 
         const name = (node.name || '').toUpperCase();
         const parentName = (node.parent?.name || '').toUpperCase();
@@ -281,36 +416,54 @@ function AnatomicalHeartScene({
         if (name.includes('LAD') || parentName.includes('LAD')) {
           node.material = materials.LAD;
           node.userData = { vessel: 'LAD' };
+          node.renderOrder = 2;
         } else if (name.includes('LCX') || parentName.includes('LCX')) {
           node.material = materials.LCX;
           node.userData = { vessel: 'LCX' };
+          node.renderOrder = 2;
         } else if (name.includes('RCA') || parentName.includes('RCA')) {
           node.material = materials.RCA;
           node.userData = { vessel: 'RCA' };
-        } else if (name.includes('AORTA') || name.includes('CAROTID') || name.includes('SUBCLAVIAN')) {
+          node.renderOrder = 2;
+        } else if (name.includes('CARDIACVEIN')) {
+          node.material = materials.CardiacVeins;
+          node.renderOrder = 2;
+        } else if (name.includes('AORTA') || name.includes('CAROTID') || name.includes('SUBCLAVIAN') || name.includes('BRACHIO') || name.includes('SINUS')) {
           node.material = materials.Aorta;
+          node.renderOrder = 1;
+        } else if (name.includes('AURICLE')) {
+          node.material = materials.Auricles;
+          node.renderOrder = 1;
+        } else if (name.includes('PULMONARYVEIN')) {
+          node.material = materials.Atria;
+          node.renderOrder = 1;
         } else if (name.includes('PULMONARY')) {
           node.material = materials.PulmonaryArtery;
+          node.renderOrder = 1;
         } else if (name.includes('VENACAVA')) {
           node.material = materials.VenaCava;
-        } else if (name.includes('ATRI') || name.includes('AURICLE')) {
+          node.renderOrder = 1;
+        } else if (name.includes('ATRI')) {
           node.material = materials.Atria;
-        } else if (name.includes('FAT')) {
+          node.renderOrder = 1;
+        } else if (name.includes('FAT') || parentName.includes('FAT')) {
           node.material = materials.EpicardialFat;
+          node.renderOrder = 1;
         } else {
           node.material = materials.Myocardium;
+          node.renderOrder = 0;
         }
       }
     });
   }, [clonedScene, materials]);
 
-  // Subtle organic systolic/diastolic pulsing in useFrame to simulate living heartbeat
+  // Subtle organic systolic/diastolic pulsing in useFrame
   useFrame((state) => {
     if (!groupRef.current || !isPulsing) return;
     const t = state.clock.getElapsedTime();
     const freq = (heartRate / 60) * Math.PI * 2;
-    const pulse = 1.0 + (Math.sin(t * freq) + Math.sin(t * freq * 2) * 0.3) * 0.022;
-    groupRef.current.scale.set(0.92 * pulse, 0.92 * pulse, 0.92 * pulse);
+    const pulse = 1.0 + (Math.sin(t * freq) + Math.sin(t * freq * 2) * 0.3) * 0.012;
+    groupRef.current.scale.set(pulse, pulse, pulse);
   });
 
   const handlePointerOver = (e) => {
@@ -337,131 +490,130 @@ function AnatomicalHeartScene({
   };
 
   return (
-    <group ref={groupRef} position={[0, -0.05, 0]} scale={[0.92, 0.92, 0.92]}>
-      <primitive
-        object={clonedScene}
-        onPointerOver={handlePointerOver}
-        onPointerOut={handlePointerOut}
-        onClick={handleClick}
-      />
+    <group
+      ref={groupRef}
+      position={[0, 0, 0]}
+      rotation={[0, 0, 0]}
+      scale={[1, 1, 1]}
+    >
+      <group ref={modelRef}>
+        <primitive
+          object={clonedScene}
+          onPointerOver={handlePointerOver}
+          onPointerOut={handlePointerOut}
+          onClick={handleClick}
+        />
+      </group>
 
-      {/* Floating 3D HTML Annotation Badges (pinned cleanly to anatomical vessel sulci) */}
+      {/* Unobtrusive Lateral Callout Indicators: Positioned cleanly off the heart flanks with subtle connectors so coronary paths remain 100% visible */}
       {showLabels && (
         <>
-          {/* LAD Floating Badge (Anterior Interventricular Sulcus) */}
-          <Html position={[0.1, -0.42, 0.95]} center distanceFactor={4.0}>
+          {/* LAD Callout: Positioned cleanly off the lower-left flank without overlapping anterior sulcus */}
+          <Html position={[-1.25, -0.65, 0.85]} center distanceFactor={5.5}>
             <div
               onClick={() => onSelectVessel && onSelectVessel('LAD')}
-              className={`cursor-pointer transition-all duration-200 select-none ${
+              className={`cursor-pointer transition-all duration-200 select-none group flex items-center ${
                 selectedVessel === 'LAD'
-                  ? 'scale-110 z-30 ring-2 ring-rose-500 rounded-full'
-                  : 'hover:scale-105 opacity-90 hover:opacity-100 z-10'
+                  ? 'scale-105 z-30'
+                  : 'hover:scale-105 opacity-85 hover:opacity-100 z-10'
               }`}
             >
               <div
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md shadow-md border transition-all ${
-                  isLightTheme
-                    ? 'bg-white/95 text-slate-800 shadow-slate-200/90 border-slate-200/90'
-                    : 'bg-slate-900/95 text-white shadow-black/60 border-slate-700/80'
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md shadow-xs border transition-all ${
+                  selectedVessel === 'LAD'
+                    ? 'bg-white shadow-sm ring-2 ring-rose-500/80 border-rose-300'
+                    : 'bg-white/90 hover:bg-white text-slate-800 border-slate-200/90'
                 }`}
-                style={{
-                  borderColor: selectedVessel === 'LAD' ? VESSEL_COLORS.LAD : `${getRiskColor(ladProb)}66`,
-                  boxShadow: `0 2px 10px ${ladProb != null ? `${VESSEL_COLORS.LAD}44` : 'rgba(0,0,0,0.1)'}`,
-                }}
               >
                 <span
                   className="w-2 h-2 rounded-full shrink-0 animate-pulse"
-                  style={{ backgroundColor: ladProb != null ? VESSEL_COLORS.LAD : '#94a3b8' }}
+                  style={{ backgroundColor: ladProb != null ? getRiskColor(ladProb) : VESSEL_COLORS.LAD }}
                 />
                 <span className="font-mono font-bold text-[11px] tracking-tight">LAD</span>
                 <span
                   className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold"
                   style={{
-                    backgroundColor: ladProb != null ? `${getRiskColor(ladProb)}18` : 'rgba(148,163,184,0.15)',
-                    color: ladProb != null ? getRiskColor(ladProb) : '#64748b',
+                    backgroundColor: ladProb != null ? `${getRiskColor(ladProb)}18` : `${VESSEL_COLORS.LAD}18`,
+                    color: ladProb != null ? getRiskColor(ladProb) : VESSEL_COLORS.LAD,
                   }}
                 >
-                  {ladProb != null ? `${(ladProb * 100).toFixed(0)}% ${getRiskTier(ladProb)}` : 'Pending'}
+                  {ladProb != null ? `${(ladProb * 100).toFixed(0)}%` : 'Anterior'}
                 </span>
               </div>
+              {/* Subtle visual connector indicator towards anterior groove */}
+              <div className="w-4 h-px bg-slate-300 hidden sm:block opacity-70 ml-1" />
             </div>
           </Html>
 
-          {/* LCX Floating Badge (Left Circumflex Sulcus) */}
-          <Html position={[-1.25, 0.22, 0.35]} center distanceFactor={4.0}>
+          {/* LCX Callout: Positioned clear off the left flank */}
+          <Html position={[-1.65, 0.25, 0.35]} center distanceFactor={5.5}>
             <div
               onClick={() => onSelectVessel && onSelectVessel('LCX')}
-              className={`cursor-pointer transition-all duration-200 select-none ${
+              className={`cursor-pointer transition-all duration-200 select-none group flex items-center ${
                 selectedVessel === 'LCX'
-                  ? 'scale-110 z-30 ring-2 ring-teal-500 rounded-full'
-                  : 'hover:scale-105 opacity-90 hover:opacity-100 z-10'
+                  ? 'scale-105 z-30'
+                  : 'hover:scale-105 opacity-85 hover:opacity-100 z-10'
               }`}
             >
               <div
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md shadow-md border transition-all ${
-                  isLightTheme
-                    ? 'bg-white/95 text-slate-800 shadow-slate-200/90 border-slate-200/90'
-                    : 'bg-slate-900/95 text-white shadow-black/60 border-slate-700/80'
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md shadow-xs border transition-all ${
+                  selectedVessel === 'LCX'
+                    ? 'bg-white shadow-sm ring-2 ring-teal-500/80 border-teal-300'
+                    : 'bg-white/90 hover:bg-white text-slate-800 border-slate-200/90'
                 }`}
-                style={{
-                  borderColor: selectedVessel === 'LCX' ? VESSEL_COLORS.LCX : `${getRiskColor(lcxProb)}66`,
-                  boxShadow: `0 2px 10px ${lcxProb != null ? `${VESSEL_COLORS.LCX}44` : 'rgba(0,0,0,0.1)'}`,
-                }}
               >
                 <span
                   className="w-2 h-2 rounded-full shrink-0 animate-pulse"
-                  style={{ backgroundColor: lcxProb != null ? VESSEL_COLORS.LCX : '#94a3b8' }}
+                  style={{ backgroundColor: lcxProb != null ? getRiskColor(lcxProb) : VESSEL_COLORS.LCX }}
                 />
                 <span className="font-mono font-bold text-[11px] tracking-tight">LCX</span>
                 <span
                   className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold"
                   style={{
-                    backgroundColor: lcxProb != null ? `${getRiskColor(lcxProb)}18` : 'rgba(148,163,184,0.15)',
-                    color: lcxProb != null ? getRiskColor(lcxProb) : '#64748b',
+                    backgroundColor: lcxProb != null ? `${getRiskColor(lcxProb)}18` : `${VESSEL_COLORS.LCX}18`,
+                    color: lcxProb != null ? getRiskColor(lcxProb) : VESSEL_COLORS.LCX,
                   }}
                 >
-                  {lcxProb != null ? `${(lcxProb * 100).toFixed(0)}% ${getRiskTier(lcxProb)}` : 'Pending'}
+                  {lcxProb != null ? `${(lcxProb * 100).toFixed(0)}%` : 'Lateral'}
                 </span>
               </div>
+              <div className="w-4 h-px bg-slate-300 hidden sm:block opacity-70 ml-1" />
             </div>
           </Html>
 
-          {/* RCA Floating Badge (Right AV Sulcus) */}
-          <Html position={[1.25, 0.12, 0.45]} center distanceFactor={4.0}>
+          {/* RCA Callout: Positioned clear off the right flank */}
+          <Html position={[1.60, 0.05, 0.45]} center distanceFactor={5.5}>
             <div
               onClick={() => onSelectVessel && onSelectVessel('RCA')}
-              className={`cursor-pointer transition-all duration-200 select-none ${
+              className={`cursor-pointer transition-all duration-200 select-none group flex items-center flex-row-reverse ${
                 selectedVessel === 'RCA'
-                  ? 'scale-110 z-30 ring-2 ring-orange-500 rounded-full'
-                  : 'hover:scale-105 opacity-90 hover:opacity-100 z-10'
+                  ? 'scale-105 z-30'
+                  : 'hover:scale-105 opacity-85 hover:opacity-100 z-10'
               }`}
             >
               <div
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md shadow-md border transition-all ${
-                  isLightTheme
-                    ? 'bg-white/95 text-slate-800 shadow-slate-200/90 border-slate-200/90'
-                    : 'bg-slate-900/95 text-white shadow-black/60 border-slate-700/80'
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md shadow-xs border transition-all ${
+                  selectedVessel === 'RCA'
+                    ? 'bg-white shadow-sm ring-2 ring-orange-500/80 border-orange-300'
+                    : 'bg-white/90 hover:bg-white text-slate-800 border-slate-200/90'
                 }`}
-                style={{
-                  borderColor: selectedVessel === 'RCA' ? VESSEL_COLORS.RCA : `${getRiskColor(rcaProb)}66`,
-                  boxShadow: `0 2px 10px ${rcaProb != null ? `${VESSEL_COLORS.RCA}44` : 'rgba(0,0,0,0.1)'}`,
-                }}
               >
                 <span
                   className="w-2 h-2 rounded-full shrink-0 animate-pulse"
-                  style={{ backgroundColor: rcaProb != null ? VESSEL_COLORS.RCA : '#94a3b8' }}
+                  style={{ backgroundColor: rcaProb != null ? getRiskColor(rcaProb) : VESSEL_COLORS.RCA }}
                 />
                 <span className="font-mono font-bold text-[11px] tracking-tight">RCA</span>
                 <span
                   className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold"
                   style={{
-                    backgroundColor: rcaProb != null ? `${getRiskColor(rcaProb)}18` : 'rgba(148,163,184,0.15)',
-                    color: rcaProb != null ? getRiskColor(rcaProb) : '#64748b',
+                    backgroundColor: rcaProb != null ? `${getRiskColor(rcaProb)}18` : `${VESSEL_COLORS.RCA}18`,
+                    color: rcaProb != null ? getRiskColor(rcaProb) : VESSEL_COLORS.RCA,
                   }}
                 >
-                  {rcaProb != null ? `${(rcaProb * 100).toFixed(0)}% ${getRiskTier(rcaProb)}` : 'Pending'}
+                  {rcaProb != null ? `${(rcaProb * 100).toFixed(0)}%` : 'Right AV'}
                 </span>
               </div>
+              <div className="w-4 h-px bg-slate-300 hidden sm:block opacity-70 mr-1" />
             </div>
           </Html>
         </>
@@ -481,12 +633,14 @@ export default function HeartCanvas({
   selectedVessel = 'LAD',
   onSelectVessel,
   heartRate = 72,
+  compact = false,
+  cameraPreset = null,
 }) {
   const controlsRef = useRef();
   const isInteractingRef = useRef(false);
 
-  // States
-  const [isLightTheme, setIsLightTheme] = useState(true);
+  // Permanent Hospital-Grade Light Theme
+  const isLightTheme = true;
   const [isLocked, setIsLocked] = useState(false); // Static View lock toggle
   const [autoRotate, setAutoRotate] = useState(false);
   const [isPulsing, setIsPulsing] = useState(true);
@@ -494,35 +648,40 @@ export default function HeartCanvas({
   const [xrayMode, setXrayMode] = useState(false);
   const [viewPreset, setViewPreset] = useState('anterior');
 
-  // Camera transition targets
-  const [targetPos, setTargetPos] = useState(() => new THREE.Vector3(0.12, 0.08, 4.9));
-  const [targetLookAt, setTargetLookAt] = useState(() => new THREE.Vector3(0.0, -0.20, 0.35));
+  // Camera transition targets: centered on cardiac organ at [0, 0, 0] with balanced framing
+  const [targetPos, setTargetPos] = useState(() => new THREE.Vector3(0.45, 0.20, 5.40));
+  const [targetLookAt, setTargetLookAt] = useState(() => new THREE.Vector3(0, 0, 0));
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  // Smooth Camera View Presets
+  // Smooth Camera View Presets with full anatomical visibility
   const focusOnPreset = (presetName, vesselToSelect = undefined) => {
     isInteractingRef.current = false;
     setAutoRotate(false);
     setViewPreset(presetName);
 
-    const pos = new THREE.Vector3(0, 0, 5.8);
-    const target = new THREE.Vector3(0, -0.05, 0);
+    const pos = new THREE.Vector3(0.45, 0.20, 5.40);
+    const target = new THREE.Vector3(0, 0, 0);
 
     if (presetName === 'anterior') {
-      pos.set(0.12, 0.08, 4.9);
-      target.set(0.0, -0.20, 0.35);
+      // Anterior LAD: elevated anterior-oblique angle exposing full anterior groove, LMCA bifurcation, and apex
+      pos.set(0.25, 0.10, 5.20);
+      target.set(0, 0, 0);
     } else if (presetName === 'lateral') {
-      pos.set(-3.2, 0.20, 3.2);
-      target.set(-0.35, -0.05, 0.05);
+      // Lateral LCX: reveals left AV groove, obtuse marginals, and lateral LV wall
+      pos.set(-4.80, 0.30, 2.00);
+      target.set(-0.10, 0, 0);
     } else if (presetName === 'inferior') {
-      pos.set(0.0, -2.5, -4.5);
-      target.set(0.0, -0.2, 0.0);
+      // Inferior/Posterior: diaphragmatic crux, posterior descending branch, and pulmonary veins
+      pos.set(0.30, -4.40, -2.80);
+      target.set(0, -0.10, 0);
     } else if (presetName === 'rightav') {
-      pos.set(3.2, 0.15, 3.4);
-      target.set(0.35, -0.05, 0.05);
+      // Right AV RCA: exposes right aortic sinus ostium, right AV groove, conus, and acute marginal branches
+      pos.set(4.80, 0.30, 2.00);
+      target.set(0.10, 0, 0);
     } else if (presetName === 'default') {
-      pos.set(0, 0, 5.8);
-      target.set(0, -0.05, 0);
+      // Balanced overview of complete cardiovascular complex
+      pos.set(0.45, 0.20, 5.40);
+      target.set(0, 0, 0);
     }
 
     setTargetPos(pos);
@@ -547,6 +706,25 @@ export default function HeartCanvas({
     }
   }, [selectedVessel]);
 
+  // Sync camera when cameraPreset prop changes
+  useEffect(() => {
+    if (cameraPreset) {
+      if (cameraPreset === 'orbit' || cameraPreset === 'default') {
+        focusOnPreset('default', null);
+      } else if (cameraPreset === 'anterior' || cameraPreset === 'LAD') {
+        focusOnPreset('anterior', 'LAD');
+      } else if (cameraPreset === 'lateral' || cameraPreset === 'LCX') {
+        focusOnPreset('lateral', 'LCX');
+      } else if (cameraPreset === 'rightav' || cameraPreset === 'RCA') {
+        focusOnPreset('rightav', 'RCA');
+      } else if (cameraPreset === 'inferior') {
+        focusOnPreset('inferior', 'RCA');
+      } else {
+        focusOnPreset(cameraPreset);
+      }
+    }
+  }, [cameraPreset]);
+
   // Reset Framing: Smoothly returns camera to default overview without deleting patient prediction
   const resetCamera = () => {
     focusOnPreset('default', null);
@@ -565,266 +743,234 @@ export default function HeartCanvas({
 
   return (
     <div
-      className={`relative w-full h-full min-h-[480px] rounded-2xl overflow-hidden transition-colors duration-500 shadow-sm flex flex-col border ${
-        isLightTheme
-          ? 'bg-gradient-to-b from-slate-50 via-slate-100/90 to-slate-200/80 border-slate-200 text-slate-800'
-          : 'bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border-slate-800 text-slate-100'
-      }`}
+      className={`relative w-full h-[580px] lg:h-[620px] ${compact ? 'min-h-[280px] h-[320px]' : ''} rounded-xl overflow-hidden shadow-xs border bg-gradient-to-b from-[#F8FAFC] via-[#F1F5F9] to-[#EDF4FF] border-slate-200 text-slate-800`}
     >
-      {/* Top Left Anatomical Header Bar */}
-      <div
-        className={`absolute top-3.5 left-3.5 z-20 flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-xl border backdrop-blur-md shadow-xs transition-colors ${
-          isLightTheme
-            ? 'bg-white/90 border-slate-200 text-slate-800'
-            : 'bg-slate-900/85 border-slate-700/80 text-slate-200'
-        }`}
-      >
-        <div className="flex items-center gap-1.5">
-          <Heart className="w-3.5 h-3.5 text-rose-500 animate-pulse fill-current" />
-          <span className="text-[11px] font-bold tracking-wide uppercase">
-            3D Coronary Anatomy
-          </span>
-        </div>
-        <div className={`h-3 w-px ${isLightTheme ? 'bg-slate-300' : 'bg-slate-700'}`} />
-        <div className="flex items-center gap-1 text-[11px] font-mono font-medium text-sky-700 dark:text-sky-400">
-          <Activity className="w-3 h-3" />
-          <span>{isPulsing ? `${heartRate} BPM` : 'PAUSED'}</span>
-        </div>
-        <div className={`h-3 w-px ${isLightTheme ? 'bg-slate-300' : 'bg-slate-700'}`} />
-        <div className="flex items-center gap-1 text-[10px] font-mono font-semibold">
-          {hasLivePredictions ? (
-            <span className="text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live Prediction Active
+      {/* Top Left Anatomical Header Bar: Compact, clean status indicator */}
+      {!compact && (
+        <div className="absolute top-3.5 left-3.5 z-20 flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-xl border backdrop-blur-md shadow-xs bg-white/90 border-slate-200 text-slate-800">
+          <div className="flex items-center gap-1.5">
+            <Heart className="w-3.5 h-3.5 text-rose-500 animate-pulse fill-current" />
+            <span className="text-[11px] font-bold tracking-wide uppercase">
+              3D Coronary Anatomy
             </span>
-          ) : (
-            <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              Run AI Assessment to view model predictions
-            </span>
-          )}
+          </div>
+          <div className="h-3 w-px bg-slate-300" />
+          <div className="flex items-center gap-1 text-[11px] font-mono font-medium text-sky-700">
+            <Activity className="w-3 h-3" />
+            <span>{isPulsing ? `${heartRate} BPM` : 'PAUSED'}</span>
+          </div>
+          <div className="h-3 w-px bg-slate-300" />
+          <div className="flex items-center gap-1 text-[10px] font-mono font-semibold">
+            {hasLivePredictions ? (
+              <span className="text-emerald-700 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live Assessment Overlay
+              </span>
+            ) : (
+              <span className="text-slate-500 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                Territory Baseline
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Persistent Plaque Localization Disclaimer Badge */}
-      <div className="absolute top-12 left-3.5 z-20 max-w-sm px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-[10px] font-medium backdrop-blur-md flex items-center gap-1.5 shadow-2xs">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-        <span>Prediction mapped to anatomical vessel; this does not represent measured plaque location.</span>
-      </div>
+      {/* Floating Toolbar (Top Right): Clean, grouped controls with accessible tooltips */}
+      {!compact && (
+        <div className="absolute top-3.5 right-3.5 z-20 flex flex-wrap items-center gap-1 p-1 rounded-xl border backdrop-blur-md shadow-xs bg-white/95 border-slate-200 text-slate-700">
+          {/* Static / Lock View Toggle Button */}
+          <button
+            onClick={() => {
+              setIsLocked(!isLocked);
+              if (!isLocked) setAutoRotate(false);
+            }}
+            title={isLocked ? 'Unlock 3D Camera & Interaction' : 'Lock / Static View (Prevents Movement)'}
+            aria-label={isLocked ? 'Unlock 3D Camera' : 'Lock 3D Camera'}
+            className={`px-2 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+              isLocked
+                ? 'bg-sky-100 text-sky-800 border border-sky-300 font-semibold shadow-2xs'
+                : 'hover:bg-slate-100 text-slate-600'
+            }`}
+          >
+            {isLocked ? <Lock className="w-3.5 h-3.5 text-sky-600" /> : <Unlock className="w-3.5 h-3.5 text-slate-400" />}
+            <span className="text-[11px] hidden sm:inline">{isLocked ? 'Static View' : 'Orbit'}</span>
+          </button>
 
-      {/* Floating Toolbar: Static View Lock, Views, Zoom, Display Controls */}
-      <div
-        className={`absolute top-3.5 right-3.5 z-20 flex flex-wrap items-center gap-1 p-1 rounded-xl border backdrop-blur-md shadow-xs transition-colors ${
-          isLightTheme
-            ? 'bg-white/95 border-slate-200 text-slate-700'
-            : 'bg-slate-900/90 border-slate-700/80 text-slate-300'
-        }`}
-      >
-        {/* Static / Lock View Toggle Button */}
-        <button
-          onClick={() => {
-            setIsLocked(!isLocked);
-            if (!isLocked) setAutoRotate(false);
-          }}
-          title={isLocked ? 'Unlock 3D Camera & Interaction' : 'Lock / Static View (Prevents Movement)'}
-          className={`px-2 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all ${
-            isLocked
-              ? 'bg-sky-100 text-sky-800 border border-sky-300 font-semibold shadow-2xs'
-              : 'hover:bg-slate-100 text-slate-600'
-          }`}
-        >
-          {isLocked ? <Lock className="w-3.5 h-3.5 text-sky-600" /> : <Unlock className="w-3.5 h-3.5 text-slate-400" />}
-          <span className="text-[11px] hidden sm:inline">{isLocked ? 'Static View' : 'Orbit'}</span>
-        </button>
+          <div className="h-3.5 w-px mx-0.5 bg-slate-200" />
 
-        <div className={`h-3.5 w-px mx-0.5 ${isLightTheme ? 'bg-slate-200' : 'bg-slate-700'}`} />
+          {/* View Presets */}
+          <button
+            onClick={() => focusOnPreset('anterior', 'LAD')}
+            title="Anterior LAD (Left Anterior Descending & Apex)"
+            aria-label="Anterior LAD View"
+            className={`px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              viewPreset === 'anterior' && selectedVessel === 'LAD'
+                ? 'bg-slate-900 text-white shadow-xs font-semibold'
+                : 'hover:bg-slate-100 text-slate-700'
+            }`}
+          >
+            Anterior LAD
+          </button>
+          <button
+            onClick={() => focusOnPreset('lateral', 'LCX')}
+            title="Lateral LCX (Left Circumflex & Obtuse Marginals)"
+            aria-label="Lateral LCX View"
+            className={`px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              viewPreset === 'lateral' && selectedVessel === 'LCX'
+                ? 'bg-slate-900 text-white shadow-xs font-semibold'
+                : 'hover:bg-slate-100 text-slate-700'
+            }`}
+          >
+            Lateral LCX
+          </button>
+          <button
+            onClick={() => focusOnPreset('rightav', 'RCA')}
+            title="Right AV RCA (Right Coronary Artery Groove)"
+            aria-label="Right AV RCA View"
+            className={`px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              viewPreset === 'rightav' && selectedVessel === 'RCA'
+                ? 'bg-slate-900 text-white shadow-xs font-semibold'
+                : 'hover:bg-slate-100 text-slate-700'
+            }`}
+          >
+            Right AV RCA
+          </button>
+          <button
+            onClick={() => focusOnPreset('inferior', 'RCA')}
+            title="Inferior/Posterior (PDA & Diaphragmatic Surface)"
+            aria-label="Inferior Posterior View"
+            className={`px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              viewPreset === 'inferior'
+                ? 'bg-slate-900 text-white shadow-xs font-semibold'
+                : 'hover:bg-slate-100 text-slate-700'
+            }`}
+          >
+            Inferior/Posterior
+          </button>
 
-        {/* View Presets */}
-        <button
-          onClick={() => focusOnPreset('anterior', 'LAD')}
-          title="Anterior Interventricular View (LAD Focus)"
-          className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
-            viewPreset === 'anterior' && selectedVessel === 'LAD'
-              ? 'bg-slate-800 text-white shadow-xs dark:bg-white dark:text-slate-900'
-              : 'hover:bg-slate-100 text-slate-600 dark:hover:bg-slate-800 dark:text-slate-300'
-          }`}
-        >
-          Anterior
-        </button>
-        <button
-          onClick={() => focusOnPreset('lateral', 'LCX')}
-          title="Left Circumflex Sulcus (LCX Focus)"
-          className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
-            viewPreset === 'lateral' && selectedVessel === 'LCX'
-              ? 'bg-slate-800 text-white shadow-xs dark:bg-white dark:text-slate-900'
-              : 'hover:bg-slate-100 text-slate-600 dark:hover:bg-slate-800 dark:text-slate-300'
-          }`}
-        >
-          Lateral
-        </button>
-        <button
-          onClick={() => focusOnPreset('inferior', 'RCA')}
-          title="Inferior / Posterior Diaphragmatic Surface (RCA/PDA)"
-          className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
-            viewPreset === 'inferior'
-              ? 'bg-slate-800 text-white shadow-xs dark:bg-white dark:text-slate-900'
-              : 'hover:bg-slate-100 text-slate-600 dark:hover:bg-slate-800 dark:text-slate-300'
-          }`}
-        >
-          Inferior
-        </button>
-        <button
-          onClick={() => focusOnPreset('rightav', 'RCA')}
-          title="Right AV Sulcus (RCA Trunk)"
-          className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
-            viewPreset === 'rightav' && selectedVessel === 'RCA'
-              ? 'bg-slate-800 text-white shadow-xs dark:bg-white dark:text-slate-900'
-              : 'hover:bg-slate-100 text-slate-600 dark:hover:bg-slate-800 dark:text-slate-300'
-          }`}
-        >
-          Right AV
-        </button>
+          <div className="h-3.5 w-px mx-0.5 bg-slate-200" />
 
-        <div className={`h-3.5 w-px mx-0.5 ${isLightTheme ? 'bg-slate-200' : 'bg-slate-700'}`} />
+          {/* Zoom Controls */}
+          <button
+            disabled={isLocked}
+            onClick={() => handleZoom('in')}
+            title="Zoom In"
+            aria-label="Zoom In"
+            className="p-1 rounded-md text-xs hover:bg-slate-100 text-slate-600 disabled:opacity-40 cursor-pointer"
+          >
+            <ZoomIn className="w-3.5 h-3.5" />
+          </button>
+          <button
+            disabled={isLocked}
+            onClick={() => handleZoom('out')}
+            title="Zoom Out"
+            aria-label="Zoom Out"
+            className="p-1 rounded-md text-xs hover:bg-slate-100 text-slate-600 disabled:opacity-40 cursor-pointer"
+          >
+            <ZoomOut className="w-3.5 h-3.5" />
+          </button>
 
-        {/* Zoom Controls */}
-        <button
-          disabled={isLocked}
-          onClick={() => handleZoom('in')}
-          title="Zoom In"
-          className="p-1 rounded-md text-xs hover:bg-slate-100 text-slate-500 disabled:opacity-40"
-        >
-          <ZoomIn className="w-3.5 h-3.5" />
-        </button>
-        <button
-          disabled={isLocked}
-          onClick={() => handleZoom('out')}
-          title="Zoom Out"
-          className="p-1 rounded-md text-xs hover:bg-slate-100 text-slate-500 disabled:opacity-40"
-        >
-          <ZoomOut className="w-3.5 h-3.5" />
-        </button>
+          <div className="h-3.5 w-px mx-0.5 bg-slate-200" />
 
-        <div className={`h-3.5 w-px mx-0.5 ${isLightTheme ? 'bg-slate-200' : 'bg-slate-700'}`} />
+          {/* Orbit Auto-Rotation */}
+          <button
+            disabled={isLocked}
+            onClick={() => setAutoRotate(!autoRotate)}
+            title={isLocked ? 'Unlock view to enable rotation' : autoRotate ? 'Stop Slow Orbit' : 'Start Slow Orbit'}
+            aria-label="Toggle Slow Orbit"
+            className={`p-1 rounded-md text-xs transition-colors cursor-pointer ${
+              autoRotate
+                ? 'bg-sky-100 text-sky-700'
+                : 'hover:bg-slate-100 text-slate-600 disabled:opacity-40'
+            }`}
+          >
+            <RotateCw className="w-3.5 h-3.5" />
+          </button>
 
-        {/* Theme Toggle (Light / Dark) */}
-        <button
-          onClick={() => setIsLightTheme(!isLightTheme)}
-          title={isLightTheme ? 'Switch to Dark Theme' : 'Switch to Clean Light Theme'}
-          className="p-1 rounded-md text-xs hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
-        >
-          {isLightTheme ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
-        </button>
+          {/* Floating Labels Toggle */}
+          <button
+            onClick={() => setShowLabels(!showLabels)}
+            title={showLabels ? 'Hide Vessel Callouts' : 'Show Vessel Callouts'}
+            aria-label="Toggle Vessel Labels"
+            className={`p-1 rounded-md text-xs transition-colors cursor-pointer ${
+              showLabels ? 'text-sky-700 bg-sky-50' : 'hover:bg-slate-100 text-slate-600'
+            }`}
+          >
+            {showLabels ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+          </button>
 
-        {/* Orbit Auto-Rotation */}
-        <button
-          disabled={isLocked}
-          onClick={() => setAutoRotate(!autoRotate)}
-          title={isLocked ? 'Unlock view to enable rotation' : autoRotate ? 'Stop Slow Orbit' : 'Start Slow Orbit'}
-          className={`p-1 rounded-md text-xs transition-colors ${
-            autoRotate
-              ? 'bg-sky-100 text-sky-700'
-              : 'hover:bg-slate-100 text-slate-500 disabled:opacity-40'
-          }`}
-        >
-          <RotateCw className="w-3.5 h-3.5" />
-        </button>
+          {/* X-Ray Mode Toggle */}
+          <button
+            onClick={() => setXrayMode(!xrayMode)}
+            title={xrayMode ? 'Opaque Anatomy' : 'Translucent X-Ray'}
+            aria-label="Toggle X-Ray Mode"
+            className={`p-1 rounded-md text-xs transition-colors cursor-pointer ${
+              xrayMode ? 'text-sky-700 bg-sky-50' : 'hover:bg-slate-100 text-slate-600'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+          </button>
 
-        {/* Floating Labels Toggle */}
-        <button
-          onClick={() => setShowLabels(!showLabels)}
-          title={showLabels ? 'Hide Floating Badges' : 'Show Floating Badges'}
-          className={`p-1 rounded-md text-xs transition-colors ${
-            showLabels ? 'text-sky-700 bg-sky-50' : 'hover:bg-slate-100 text-slate-500'
-          }`}
-        >
-          {showLabels ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-        </button>
+          {/* Reset Camera Button */}
+          <button
+            onClick={resetCamera}
+            title="Reset Framing (Restores neutral overview)"
+            aria-label="Reset Camera Framing"
+            className="p-1 rounded-md text-xs hover:bg-slate-100 text-slate-600 hover:text-slate-900 cursor-pointer"
+          >
+            <Compass className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
-        {/* X-Ray Mode Toggle */}
-        <button
-          onClick={() => setXrayMode(!xrayMode)}
-          title={xrayMode ? 'Opaque Anatomy' : 'Translucent X-Ray'}
-          className={`p-1 rounded-md text-xs transition-colors ${
-            xrayMode ? 'text-sky-700 bg-sky-50' : 'hover:bg-slate-100 text-slate-500'
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Reset Camera Button */}
-        <button
-          onClick={resetCamera}
-          title="Reset Framing (Restores neutral overview without clearing patient prediction)"
-          className="p-1 rounded-md text-xs hover:bg-slate-100 text-slate-500 hover:text-slate-800"
-        >
-          <Compass className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {/* 3D Canvas with Post-Processing Bloom & Studio Medical Lighting */}
-      <div className="flex-1 w-full h-full relative cursor-grab active:cursor-grabbing">
+      {/* 3D Canvas with Restrained Scientific Lighting */}
+      <div className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing">
         <Canvas
           shadows
-          camera={{ position: [0.12, 0.08, 4.9], fov: 40 }}
+          camera={{ position: [0.45, 0.20, 5.40], fov: 36 }}
           className="w-full h-full"
         >
-          {/* Studio Medical Lighting System */}
-          {isLightTheme ? (
-            <>
-              <ambientLight intensity={1.15} color="#ffffff" />
-              <directionalLight
-                position={[6, 9, 6]}
-                intensity={1.6}
-                color="#ffffff"
-                castShadow
-                shadow-mapSize={[1024, 1024]}
-                shadow-bias={-0.0001}
-              />
-              <directionalLight
-                position={[-6, 4, -5]}
-                intensity={0.9}
-                color="#38bdf8"
-              />
-              <directionalLight
-                position={[0, -5, 3]}
-                intensity={0.45}
-                color="#f1f5f9"
-              />
-              <pointLight position={[0, 1.0, 2.2]} intensity={0.5} color="#ffffff" distance={6} />
-            </>
-          ) : (
-            <>
-              <ambientLight intensity={0.65} color="#94a3b8" />
-              <directionalLight
-                position={[5, 8, 5]}
-                intensity={1.6}
-                color="#ffffff"
-                castShadow
-                shadow-mapSize={[1024, 1024]}
-                shadow-bias={-0.0001}
-              />
-              <directionalLight
-                position={[-5, 4, -4]}
-                intensity={1.2}
-                color="#38bdf8"
-              />
-              <directionalLight
-                position={[0, -5, 2]}
-                intensity={0.4}
-                color="#cbd5e1"
-              />
-              <pointLight position={[0, 1.2, 1.8]} intensity={0.8} color="#38bdf8" distance={5} />
-            </>
-          )}
+          {/* Medical-Art Studio Lighting Setup */}
+          <hemisphereLight
+            skyColor="#FFFFFF"
+            groundColor="#334155"
+            intensity={0.65}
+          />
+          {/* Key light: principal directional light revealing chamber curvature and myofibrils */}
+          <directionalLight
+            position={[8, 12, 8]}
+            intensity={1.35}
+            color="#FFFFFF"
+            castShadow
+            shadow-mapSize-width={1024}
+            shadow-mapSize-height={1024}
+            shadow-bias={-0.0001}
+          />
+          {/* High-Contrast Rim Backlight: creates the signature glowing silhouette edge */}
+          <directionalLight
+            position={[-7, 8, -8]}
+            intensity={1.75}
+            color="#FFFFFF"
+          />
+          {/* Front fill light for organic vascular grooves */}
+          <directionalLight
+            position={[0, -2, 6]}
+            intensity={0.45}
+            color="#E2E8F0"
+          />
+          {/* Subtle bottom bounce fill */}
+          <directionalLight
+            position={[4, -8, -4]}
+            intensity={0.30}
+            color="#94A3B8"
+          />
 
           <Suspense
             fallback={
               <Html center>
                 <div
-                  className={`flex flex-col items-center gap-2 px-4 py-3 rounded-xl border shadow-sm ${
-                    isLightTheme ? 'bg-white/95 text-slate-800 border-slate-200' : 'bg-slate-900/95 text-slate-200 border-slate-700'
-                  }`}
+                  className="flex flex-col items-center gap-2 px-4 py-3 rounded-xl border shadow-sm bg-white/95 text-slate-800 border-slate-200"
                 >
                   <div className="w-5 h-5 border-2 border-sky-600 border-t-transparent rounded-full animate-spin" />
                   <span className="text-xs font-mono">Loading 3D Anatomy...</span>
@@ -832,6 +978,9 @@ export default function HeartCanvas({
               </Html>
             }
           >
+            {/* Subtle ambient reflection fill */}
+            <Environment preset="studio" environmentIntensity={0.14} />
+
             <AnatomicalHeartScene
               ladProb={ladProb}
               lcxProb={lcxProb}
@@ -845,6 +994,10 @@ export default function HeartCanvas({
               isLightTheme={isLightTheme}
             />
 
+            <DynamicCameraFitter
+              controlsRef={controlsRef}
+            />
+
             <CameraFocusController
               targetPos={targetPos}
               targetLookAt={targetLookAt}
@@ -856,12 +1009,12 @@ export default function HeartCanvas({
             />
           </Suspense>
 
-          {/* Cinematic Post-Processing Bloom for High-Probability Highlighted Vessels */}
+          {/* Controlled post-processing bloom for subtle risk luminescence without fuzzy halos */}
           <EffectComposer multisampling={4} disableNormalPass>
             <Bloom
-              luminanceThreshold={0.55}
-              luminanceSmoothing={0.35}
-              intensity={0.75}
+              luminanceThreshold={0.94}
+              luminanceSmoothing={0.25}
+              intensity={0.08}
               mipmapBlur
             />
           </EffectComposer>
@@ -873,14 +1026,16 @@ export default function HeartCanvas({
             enablePan={!isLocked}
             enableDamping
             dampingFactor={0.06}
-            minDistance={3.2}
-            maxDistance={8.5}
-            maxPolarAngle={Math.PI / 1.55}
+            minDistance={2.5}
+            maxDistance={12.0}
+            maxPolarAngle={Math.PI / 1.35}
+            minPolarAngle={Math.PI / 8}
+            target={[0, 0, 0]}
             autoRotate={!isLocked && autoRotate}
             autoRotateSpeed={0.85}
             onStart={() => {
               isInteractingRef.current = true;
-              setIsTransitioning(false); // Stop lerping immediately when user interacts
+              setIsTransitioning(false);
             }}
             onEnd={() => {
               isInteractingRef.current = false;
@@ -889,57 +1044,25 @@ export default function HeartCanvas({
         </Canvas>
       </div>
 
-      {/* Bottom Color Risk Legend & Interactive Quick-Focus Bar */}
-      <div
-        className={`absolute bottom-3.5 left-3.5 right-3.5 z-20 flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border backdrop-blur-md shadow-xs transition-colors ${
-          isLightTheme
-            ? 'bg-white/95 border-slate-200 text-slate-800'
-            : 'bg-slate-900/90 border-slate-700 text-slate-200'
-        }`}
-      >
-        {/* Anatomical Semantic Legend & Plaque Disclaimers */}
-        <div className="flex flex-col gap-1 text-xs max-w-xl">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: VESSEL_COLORS.LAD }} />
-              <span className="font-bold text-slate-800 dark:text-slate-200">LAD</span>
-              <span className="text-[11px] text-slate-500">Left Anterior Descending</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: VESSEL_COLORS.LCX }} />
-              <span className="font-bold text-slate-800 dark:text-slate-200">LCX</span>
-              <span className="text-[11px] text-slate-500">Left Circumflex</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: VESSEL_COLORS.RCA }} />
-              <span className="font-bold text-slate-800 dark:text-slate-200">RCA</span>
-              <span className="text-[11px] text-slate-500">Right Coronary Artery</span>
-            </div>
-          </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span>• Vessel emphasis reflects model-predicted probability.</span>
-            <span>• Not direct plaque localization.</span>
-            <span>• Visual intensity represents model-predicted probability, not measured anatomical severity.</span>
-          </div>
-        </div>
-
-        {/* Selected Vessel Diagnostic Quick Tabs */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-slate-500 text-xs font-medium hidden lg:inline">Focus:</span>
+      {/* Clean Floating Vessel Quick-Focus Bar at Bottom-Left */}
+      {!compact && (
+        <div className="absolute bottom-3.5 left-3.5 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border backdrop-blur-md shadow-xs bg-white/90 border-slate-200 text-slate-800 pointer-events-auto">
+          <span className="text-slate-500 text-xs font-medium hidden sm:inline mr-0.5">Focus:</span>
           {[
-            { id: 'LAD', label: 'LAD', prob: ladProb, color: VESSEL_COLORS.LAD, preset: 'anterior' },
-            { id: 'LCX', label: 'LCX', prob: lcxProb, color: VESSEL_COLORS.LCX, preset: 'lateral' },
-            { id: 'RCA', label: 'RCA', prob: rcaProb, color: VESSEL_COLORS.RCA, preset: 'rightav' }
+            { id: 'LAD', label: 'LAD', prob: ladProb, color: ladProb != null ? getRiskColor(ladProb) : VESSEL_COLORS.LAD, preset: 'anterior' },
+            { id: 'LCX', label: 'LCX', prob: lcxProb, color: lcxProb != null ? getRiskColor(lcxProb) : VESSEL_COLORS.LCX, preset: 'lateral' },
+            { id: 'RCA', label: 'RCA', prob: rcaProb, color: rcaProb != null ? getRiskColor(rcaProb) : VESSEL_COLORS.RCA, preset: 'rightav' },
           ].map((v) => {
             const isSel = selectedVessel === v.id;
             return (
               <button
                 key={v.id}
                 onClick={() => focusOnPreset(v.preset, v.id)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 border ${
+                aria-label={`Focus on ${v.label}`}
+                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
                   isSel
-                    ? 'bg-slate-900 text-white shadow-xs dark:bg-white dark:text-slate-900'
-                    : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                 }`}
                 style={{
                   borderColor: isSel ? v.color : undefined,
@@ -948,7 +1071,7 @@ export default function HeartCanvas({
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: v.color }} />
                 <span>{v.label}</span>
                 <span className="text-[10px] opacity-90 font-mono">
-                  {v.prob != null ? `${(v.prob * 100).toFixed(0)}%` : 'Pending'}
+                  {v.prob != null ? `${(v.prob * 100).toFixed(0)}%` : 'Baseline'}
                 </span>
               </button>
             );
@@ -956,16 +1079,17 @@ export default function HeartCanvas({
           <button
             onClick={() => focusOnPreset('default', null)}
             title="Reset to Neutral Anatomy Overview"
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all border ${
+            aria-label="Reset to Overview"
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all border cursor-pointer ${
               !selectedVessel
-                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900'
-                : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                ? 'bg-slate-900 text-white border-slate-900'
+                : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
             }`}
           >
             Overview
           </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }

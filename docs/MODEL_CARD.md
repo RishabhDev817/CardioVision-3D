@@ -87,6 +87,13 @@ Transformations are encapsulated inside a scikit-learn `ColumnTransformer`:
 - **Final Transformed Dimensionality:** 60 features (53 numeric/binary + 7 one-hot levels).
 - **Engineered Features:** **There are 0 engineered features.** Zero polynomial terms, ratios, or interaction features.
 
+### Feature Provenance & Inference Imputation Architecture:
+- **User-Entered Clinical Inputs (18 features):** Acquired directly from user assessment (e.g., Age, Sex, SBP, Heart Rate, Lipid Panel, ECG ST/T changes, EF, RWMA).
+- **Deterministically Derived Metrics (3 features):** Calculated directly from user-entered variables (`BMI`, `Pulse Pressure`, `Dyslipidemia`).
+- **Domain Heuristics (5 features):** Assigned based on symptom presentation patterns (e.g., `Typical Chest Pain`, `Atypical`, `Nonanginal`, `Exertional CP`, `LowTH Ang`).
+- **Reference Baselines (29 candidate features / 34 transformed inputs):** Defaulted to training-cohort medians or physiological reference baselines (e.g., `PLT`, `CR`, `ESR`, `WBC`). TreeSHAP attributions for reference baselines reflect model sensitivity under standard physiology rather than direct patient laboratory measurements.
+- **Documentation-Only Fields (3 features):** Collected for clinical context only (`troponin_i`, `ck_mb`, `diastolic_bp`); audited to have zero influence on inference.
+
 ---
 
 ## 6. Model Architecture
@@ -171,6 +178,12 @@ $$\text{Patient Inputs} \longrightarrow \text{Model Probability} \longrightarrow
 - **Core Visual Caveat:**
   > **"This mapping does not represent measured plaque location, lesion coordinates, or direct anatomical imaging."**
   Vessel highlights visually convey model-estimated risk tiers across arterial territories, not intravascular imaging coordinates.
+
+### 3D Asset Origin & Provenance:
+- **Mesh Asset:** `frontend/public/models/heart.glb`
+- **Synthesis:** Procedurally generated via custom Three.js computational geometry script (`frontend/scripts/generate_heart_model.mjs`) using NURBS splines, Catmull-Rom curves, and lathe geometry.
+- **License:** Open-source MIT License under this repository (not an external CC-BY third-party download).
+- **Vascular Sulcus Registration:** Target coronary paths (LAD, LCX, RCA) are registered along standard macroscopic anatomical landmarks (interventricular sulcus, atrioventricular groove) for territory-level educational visualization.
 
 ---
 

@@ -1,41 +1,45 @@
 import React, { useState } from 'react';
-import HeartCanvas, { VESSEL_COLORS } from './HeartCanvas';
+import HeartCanvas, { VESSEL_COLORS, getRiskColor, getRiskTier } from './HeartCanvas';
 import {
   Heart,
-  Info,
-  ShieldCheck,
-  AlertCircle,
-  Sparkles,
   BookOpen,
   ArrowRight,
-  ExternalLink,
-  Play
+  AlertTriangle,
+  Activity,
+  Layers,
+  Compass
 } from 'lucide-react';
 
 const VESSEL_ANATOMY = {
   LAD: {
     name: 'Left Anterior Descending Artery',
     code: 'LAD',
-    course: 'Originates from Left Main Coronary Artery (LMCA) and courses along the anterior interventricular sulcus to the cardiac apex.',
+    territory: 'Anterior & Apical',
+    color: '#F43F5E',
+    course: 'Originates from the Left Main Coronary Artery (LMCA) and courses along the anterior interventricular sulcus down to the cardiac apex.',
     perfusion: 'Supplies the anterior wall of the left ventricle, apex, anterior two-thirds of the interventricular septum, and bundle branches.',
-    significance: 'Critical vascular conduit ("widowmaker"). Stenosis conveys high risk of extensive anterior transmural ischemia or anterior STEMI.',
-    sourceLandmark: 'Anterior interventricular groove node in the 3D model.'
+    significance: 'Primary conduit for left ventricular anterior perfusion. Stenosis ≥50% impairs systolic ejection and anterior wall motion.',
+    sourceLandmark: 'Anterior interventricular sulcus in 3D scene.'
   },
   LCX: {
     name: 'Left Circumflex Artery',
     code: 'LCX',
-    course: 'Arises from the LMCA and runs along the left atrioventricular groove around the left cardiac border to the posterior surface.',
-    perfusion: 'Supplies the lateral and posterolateral myocardial walls of the left ventricle via obtuse marginal (OM) branches.',
-    significance: 'Stenosis can precipitate lateral ischemia, localized hypokinesis, and ischemic mitral valve dysfunction.',
-    sourceLandmark: 'Left atrioventricular sulcus node in the 3D model.'
+    territory: 'Posterolateral',
+    color: '#0D9488',
+    course: 'Arises from the LMCA and runs along the left atrioventricular groove around the left cardiac border to the diaphragmatic surface.',
+    perfusion: 'Supplies the lateral and posterolateral myocardial walls of the left ventricle via obtuse marginal branches.',
+    significance: 'Critical for lateral ventricular perfusion. Stenosis precipitates lateral hypokinesis and mitral papillary dysfunction.',
+    sourceLandmark: 'Left atrioventricular groove in 3D scene.'
   },
   RCA: {
     name: 'Right Coronary Artery',
     code: 'RCA',
+    territory: 'Inferior & RV Free Wall',
+    color: '#F97316',
     course: 'Originates from the right aortic sinus and travels inferiorly along the right atrioventricular sulcus to the crux of the heart.',
-    perfusion: 'Supplies the right ventricular free wall, inferior LV wall, sinus node (~60%), and AV node (~90% in right-dominant circulation).',
-    significance: 'Stenosis frequently triggers inferior wall ischemia, right ventricular infarction, and high-grade AV block.',
-    sourceLandmark: 'Right atrioventricular groove and posterior descending artery node in the 3D model.'
+    perfusion: 'Supplies the right ventricular free wall, inferior LV wall, sinus node (~60%), and AV node (~90%).',
+    significance: 'Supplies nodal conduction tissue and the inferior wall. Stenosis triggers inferior ischemia and acute conduction blocks.',
+    sourceLandmark: 'Right atrioventricular sulcus and crux in 3D scene.'
   }
 };
 
@@ -47,306 +51,295 @@ export default function AnatomySection({
 }) {
   const [showAttribution, setShowAttribution] = useState(false);
 
-  // Extract authentic prediction values without hardcoded demo fallbacks
+  // Extract authentic prediction values without fabricating
   const hasPrediction = Boolean(predictionData?.vessels);
   const ladProb = hasPrediction ? (predictionData.vessels.LAD?.probability ?? null) : null;
   const lcxProb = hasPrediction ? (predictionData.vessels.LCX?.probability ?? null) : null;
   const rcaProb = hasPrediction ? (predictionData.vessels.RCA?.probability ?? null) : null;
 
-  const currentVessel = selectedVessel ? (VESSEL_ANATOMY[selectedVessel] || VESSEL_ANATOMY.LAD) : null;
-  const currentVesselData = selectedVessel && hasPrediction ? predictionData.vessels[selectedVessel] : null;
+  const currentCode = selectedVessel || 'LAD';
+  const currentVessel = VESSEL_ANATOMY[currentCode] || VESSEL_ANATOMY.LAD;
+  const currentVesselData = hasPrediction ? predictionData.vessels[currentCode] : null;
   const currentProb = currentVesselData?.probability ?? null;
   const currentShap = currentVesselData?.top_shap_features || [];
 
   return (
     <div className="space-y-6 pb-12">
-      {/* 3D Centerpiece Viewer Container */}
-      <div className="hospital-card p-4 sm:p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Top Header & Compact Vessel Selector */}
+      <div className="bg-white rounded-2xl p-5 sm:p-6 space-y-4 border border-slate-200 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950 dark:text-sky-300">
-                CENTERPIECE 3D VISUALIZATION
+              <span className="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold bg-[#F0FDFA] text-[#0F766E] border border-[#CCFBF1]">
+                3D ANATOMICAL WORKSPACE
               </span>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                Interactive Coronary Anatomy & Territory Mapping
+              <h2 className="text-xl font-bold text-slate-900">
+                Coronary Anatomy &amp; Territory Mapping
               </h2>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Select LAD, LCX, or RCA to highlight its anatomical branch, focus the camera, and inspect live predicted stenosis probability with TreeSHAP explanations.
+            <p className="text-xs sm:text-sm text-slate-600 mt-1">
+              Interactive 3D model mapped to coronary perfusion territories. Click branches, callouts, or selector pills to inspect.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+            {/* Compact Vessel Selector Pills */}
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-50 border border-slate-200">
+              {['LAD', 'LCX', 'RCA'].map((code) => {
+                const isSelected = currentCode === code;
+                const vColor = code === 'LAD' ? '#F43F5E' : code === 'LCX' ? '#0D9488' : '#F97316';
+                return (
+                  <button
+                    key={code}
+                    onClick={() => onSelectVessel(code)}
+                    aria-label={`Select ${code}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center gap-1.5 cursor-pointer ${
+                      isSelected
+                        ? 'bg-white shadow-xs border border-slate-200'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: vColor }} />
+                    <span style={{ color: isSelected ? vColor : undefined }}>{code}</span>
+                  </button>
+                );
+              })}
+            </div>
+
             <button
               onClick={() => setShowAttribution(!showAttribution)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1.5 transition-colors"
+              className="p-2 rounded-xl text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 border border-slate-200 transition-colors shadow-2xs cursor-pointer"
+              title="Attribution & Provenance"
+              aria-label="Attribution and provenance information"
             >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Model Attribution & License</span>
+              <BookOpen className="w-4 h-4" />
             </button>
           </div>
         </div>
-
-        {/* 3D Canvas Box */}
-        <div className="w-full h-[520px] rounded-2xl overflow-hidden relative border border-slate-200 dark:border-slate-800 shadow-inner">
-          <HeartCanvas
-            ladProb={ladProb}
-            lcxProb={lcxProb}
-            rcaProb={rcaProb}
-            selectedVessel={selectedVessel}
-            onSelectVessel={onSelectVessel}
-          />
-        </div>
-
-        {/* Persistent Plaque Notice */}
-        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-          <span>
-            <strong>Anatomical Mapping Label:</strong> Prediction mapped to anatomical vessel; this does not represent measured plaque location or intravascular lesion geometry.
-          </span>
-        </div>
       </div>
 
-      {/* Selected Vessel Inspector Card */}
-      {currentVessel ? (
-        <div
-          className="hospital-card p-6 border-l-4 space-y-5"
-          style={{ borderLeftColor: VESSEL_COLORS[selectedVessel] }}
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-            <div className="flex items-center gap-3">
-              <div
-                className="w-4 h-4 rounded-full"
-                style={{ backgroundColor: VESSEL_COLORS[selectedVessel] }}
-              />
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                  {currentVessel.name} ({currentVessel.code})
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Coronary Branch Inspector • Mapped Landmark: {currentVessel.sourceLandmark}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 self-start sm:self-auto">
-              <div className="text-right">
-                {hasPrediction && currentProb !== null ? (
-                  <>
-                    <div className="text-2xl font-extrabold font-mono text-slate-900 dark:text-white">
-                      {(currentProb * 100).toFixed(1)}%
-                    </div>
-                    <div className="text-[11px] text-slate-500 font-medium">
-                      Predicted Stenosis Probability — {selectedVessel}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="text-lg font-bold font-mono text-amber-600 dark:text-amber-400">
-                      Pending Assessment
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      Run AI Assessment to view model predictions
-                    </div>
-                  </>
-                )}
-              </div>
-              {hasPrediction ? (
-                <button
-                  onClick={() => onNavigate('explainability')}
-                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white shadow-xs flex items-center gap-1.5 transition-colors"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Vessel SHAP Drivers</span>
-                </button>
-              ) : (
-                <button
-                  onClick={() => onNavigate('assessment')}
-                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white shadow-xs flex items-center gap-1.5 transition-colors"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Open Assessment</span>
-                </button>
-              )}
-            </div>
+      {/* Main Anatomy Workspace: 2-Column Desktop Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column (8 cols): 3D Viewer & Clear Legend */}
+        <div className="lg:col-span-8 bg-white rounded-2xl p-4 sm:p-5 space-y-4 border border-slate-200 shadow-xs">
+          <div className="w-full h-[580px] lg:h-[620px] rounded-xl overflow-hidden relative border border-slate-200 shadow-inner bg-[#F8FAFC]">
+            <HeartCanvas
+              ladProb={ladProb}
+              lcxProb={lcxProb}
+              rcaProb={rcaProb}
+              selectedVessel={selectedVessel}
+              onSelectVessel={onSelectVessel}
+              isLightTheme={true}
+            />
           </div>
 
-          {/* Clinical Risk Tier & Stenosis Status if Prediction Available */}
-          {hasPrediction && currentVesselData && (
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className={`px-2.5 py-1 rounded-md font-mono font-semibold border ${
-                currentVesselData.risk_tier === 'High'
-                  ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-300'
-                  : currentVesselData.risk_tier === 'Moderate'
-                  ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300'
-                  : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'
-              }`}>
-                {currentVesselData.risk_tier} Model Risk Tier
-              </span>
-              <span className="px-2.5 py-1 rounded-md font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                {currentVesselData.stenosis_50_plus ? '≥50% Stenosis Predicted' : '<50% Stenosis Predicted'}
-              </span>
-              <span className="text-[11px] text-slate-500 italic">
-                Model estimate derived from patient biomarkers. Not a direct catheterization measurement.
-              </span>
-            </div>
-          )}
+          {/* Dedicated Clean Legend: Territories + Validated Risk Tiers + Pinned Plaque Notice */}
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 pt-3 pb-1 text-xs text-slate-600 border-t border-slate-100">
+            {/* Combined Territories & Risk Tiers */}
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              {/* Territories */}
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Territories:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#F43F5E]" />
+                  <span className="font-semibold text-slate-900">LAD</span>
+                  <span className="text-[11px] text-slate-500">(Anterior)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#0D9488]" />
+                  <span className="font-semibold text-slate-900">LCX</span>
+                  <span className="text-[11px] text-slate-500">(Lateral)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#F97316]" />
+                  <span className="font-semibold text-slate-900">RCA</span>
+                  <span className="text-[11px] text-slate-500">(Inferior)</span>
+                </div>
+              </div>
 
-          {/* Anatomical Details Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-1">
-              <span className="font-bold text-slate-700 dark:text-slate-300">Anatomical Course</span>
-              <p className="text-slate-600 dark:text-slate-400 leading-relaxed">{currentVessel.course}</p>
+              <div className="h-3 w-px bg-slate-200 hidden sm:block" />
+
+              {/* Validated Risk Tiers */}
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Risk Tiers:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#059669]" />
+                  <span className="text-[11px] font-medium text-slate-700">Low (&lt;35%)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#D97706]" />
+                  <span className="text-[11px] font-medium text-slate-700">Mod (35–65%)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
+                  <span className="text-[11px] font-medium text-slate-700">High (≥65%)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#94A3B8]" />
+                  <span className="text-[11px] font-medium text-slate-500">Pending</span>
+                </div>
+              </div>
             </div>
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-1">
-              <span className="font-bold text-slate-700 dark:text-slate-300">Myocardial Perfusion Territory</span>
-              <p className="text-slate-600 dark:text-slate-400 leading-relaxed">{currentVessel.perfusion}</p>
-            </div>
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-1">
-              <span className="font-bold text-slate-700 dark:text-slate-300">Clinical Significance</span>
-              <p className="text-slate-600 dark:text-slate-400 leading-relaxed">{currentVessel.significance}</p>
+
+            {/* Mandatory Pinned Plaque Notice */}
+            <div className="flex items-center gap-1.5 text-[11px] text-amber-900 bg-[#FFFBEB] px-2.5 py-1 rounded-lg border border-[#FEF3C7] font-medium shrink-0">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>Highlights vascular territories; does not locate individual plaques.</span>
             </div>
           </div>
-
-          {/* Key Model-Contributing Features for This Vessel */}
-          {hasPrediction ? (
-            currentShap.length > 0 ? (
-              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
-                  <div>
-                    <span className="font-bold text-slate-700 dark:text-slate-300">
-                      Why this prediction? — Top Model Contributors for {selectedVessel} (TreeSHAP)
-                    </span>
-                    <p className="text-[11px] text-slate-500">
-                      SHAP values describe how input features contributed to the model prediction. They do not establish biological causation.
-                    </p>
-                  </div>
-                  {onNavigate && (
-                    <button
-                      onClick={() => onNavigate('explainability')}
-                      className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline shrink-0"
-                    >
-                      View Full Explanation →
-                    </button>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {currentShap.slice(0, 6).map((f, i) => (
-                    <div
-                      key={i}
-                      className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs"
-                    >
-                      <div className="flex flex-col min-w-0 pr-1">
-                        <span className="font-medium text-slate-700 dark:text-slate-200 truncate">{f.feature}</span>
-                        <span className="text-[10px] text-slate-400">
-                          {(f.shap_value || 0) >= 0 ? 'Pushes Higher' : 'Pushes Lower'}
-                        </span>
-                      </div>
-                      <span
-                        className={`font-mono font-bold shrink-0 ${
-                          (f.shap_value || 0) >= 0 ? 'text-rose-600 dark:text-rose-400' : 'text-teal-600 dark:text-teal-400'
-                        }`}
-                      >
-                        {f.contribution || ((f.shap_value || 0) >= 0 ? `+${Math.abs(f.shap_value || 0).toFixed(3)}` : `-${Math.abs(f.shap_value || 0).toFixed(3)}`)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 text-xs text-slate-500">
-                No dominant local feature attributions recorded for this vessel in the current evaluation.
-              </div>
-            )
-          ) : (
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 flex items-center justify-between gap-3">
-              <span>TreeSHAP local feature attributions will appear here once patient assessment is evaluated.</span>
-              <button
-                onClick={() => onNavigate('assessment')}
-                className="text-xs font-semibold text-rose-600 hover:text-rose-700 shrink-0"
-              >
-                Go to Assessment →
-              </button>
-            </div>
-          )}
         </div>
-      ) : (
-        /* Neutral Overview State when Reset Framing is clicked */
-        <div className="hospital-card p-6 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-            <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Coronary Vasculature Overview
-              </h3>
-              <p className="text-xs text-slate-500">
-                All major branches are in neutral overview framing. Select any branch below or click directly on the 3D heart mesh to focus.
-              </p>
+
+        {/* Right Column (4 cols): Selected Vessel Side Inspector Panel with Refined Information Hierarchy */}
+        <div className="lg:col-span-4 bg-white rounded-2xl p-5 sm:p-6 space-y-5 border border-slate-200 shadow-xs mt-3 lg:mt-0">
+          {/* 1. Vessel Name & Abbreviation */}
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: currentVessel.color }} />
+              <div>
+                <h3 className="text-base font-bold text-slate-900 leading-tight">
+                  {currentVessel.name}
+                </h3>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {currentVessel.territory} Territory
+                </span>
+              </div>
             </div>
-            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-              3 Branches Mapped
+            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
+              {currentVessel.code}
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {Object.entries(VESSEL_ANATOMY).map(([code, v]) => {
-              const prob = code === 'LAD' ? ladProb : code === 'LCX' ? lcxProb : rcaProb;
-              return (
-                <button
-                  key={code}
-                  onClick={() => onSelectVessel(code)}
-                  className="text-left p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all space-y-2 bg-slate-50/50 dark:bg-slate-800/30"
-                  style={{ borderLeftWidth: 4, borderLeftColor: VESSEL_COLORS[code] }}
+          {/* 2. Current Prediction State (Pending or Validated Model Estimate) */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Model-Estimated Stenosis Likelihood (≥50% Narrowing)
+            </span>
+            {hasPrediction && currentProb !== null ? (
+              <div className="flex items-baseline justify-between pt-0.5">
+                <div className="text-3xl font-black font-mono" style={{ color: getRiskColor(currentProb) }}>
+                  {(currentProb * 100).toFixed(1)}%
+                </div>
+                <span 
+                  className="text-xs font-semibold px-2 py-0.5 rounded border bg-white"
+                  style={{
+                    color: getRiskColor(currentProb),
+                    borderColor: `${getRiskColor(currentProb)}40`
+                  }}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-slate-900 dark:text-white">{code}</span>
-                    <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
-                      {prob != null ? `${(prob * 100).toFixed(1)}%` : 'Pending'}
+                  {getRiskTier(currentProb)} Risk
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-1.5 pt-0.5">
+                <div className="text-xs font-semibold text-slate-600">
+                  Awaiting Assessment
+                </div>
+                <p className="text-[11px] text-slate-500 leading-snug">
+                  Input patient biomarkers to compute tree-derived stenosis probability.
+                </p>
+                <button
+                  onClick={() => onNavigate('assessment')}
+                  className="text-xs font-semibold text-[#E11D48] hover:underline flex items-center gap-1 cursor-pointer pt-0.5"
+                >
+                  <span>Start patient assessment</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 3, 4, 5. Anatomical Course, Perfusion Territory & Clinical Context */}
+          <div className="space-y-3.5 text-xs pt-1">
+            <div className="space-y-1">
+              <span className="font-bold text-slate-900 block">Anatomical Course</span>
+              <p className="text-slate-600 leading-relaxed">{currentVessel.course}</p>
+            </div>
+
+            <div className="space-y-1 border-t border-slate-100 pt-3">
+              <span className="font-bold text-slate-900 block">Perfusion Territory</span>
+              <p className="text-slate-600 leading-relaxed">{currentVessel.perfusion}</p>
+            </div>
+
+            <div className="space-y-1 border-t border-slate-100 pt-3">
+              <span className="font-bold text-slate-900 block">Clinical Significance</span>
+              <p className="text-slate-600 leading-relaxed">{currentVessel.significance}</p>
+            </div>
+          </div>
+
+          {/* 6. Link to Model Explanation (SHAP) when Available */}
+          <div className="border-t border-slate-100 pt-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-900">
+                Top Biomarker Contributors (TreeSHAP)
+              </span>
+              <button
+                onClick={() => onNavigate('explainability')}
+                className="text-[11px] font-semibold text-[#0D9488] hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>Full Explanation</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+
+            {hasPrediction && currentShap.length > 0 ? (
+              <div className="space-y-1.5">
+                {currentShap.slice(0, 3).map((f, i) => (
+                  <div
+                    key={i}
+                    className="p-2 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between text-xs"
+                  >
+                    <span className="text-slate-800 font-medium truncate pr-2">
+                      {f.feature}
+                    </span>
+                    <span
+                      className={`font-mono font-bold text-[11px] shrink-0 ${
+                        (f.shap_value || 0) >= 0 ? 'text-[#E11D48]' : 'text-[#0D9488]'
+                      }`}
+                    >
+                      {(f.shap_value || 0) >= 0 ? `+${Math.abs(f.shap_value || 0).toFixed(3)}` : `-${Math.abs(f.shap_value || 0).toFixed(3)}`}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400 line-clamp-2">
-                    {v.name}
-                  </p>
-                  <p className="text-[10px] text-slate-500 line-clamp-1">
-                    {v.perfusion}
-                  </p>
-                </button>
-              );
-            })}
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-slate-500 italic">
+                {hasPrediction ? 'No dominant single feature attributions for this vessel.' : 'Run assessment to inspect patient-specific TreeSHAP attributions.'}
+              </p>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Model Attribution Modal / Slideout */}
+      {/* Model Attribution Modal / Provenance */}
       {showAttribution && (
-        <div className="hospital-card p-6 border border-sky-200 dark:border-sky-900 bg-sky-50/50 dark:bg-sky-950/20 space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-bold text-sky-950 dark:text-sky-200 flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-sky-600" />
-              <span>3D Anatomical Model Attribution & Scientific Provenance</span>
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-[#0D9488]" />
+              <span>3D Anatomical Model Attribution &amp; Scientific Provenance</span>
             </h4>
             <button
               onClick={() => setShowAttribution(false)}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-800"
+              className="text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
             >
               Close
             </button>
           </div>
-          <div className="text-xs text-slate-600 dark:text-slate-300 space-y-2 leading-relaxed">
+          <div className="text-xs text-slate-700 space-y-2 leading-relaxed">
             <p>
-              <strong>Model Source:</strong> Open-source segmented 3D Human Coronary Anatomy Geometry (GLTF/GLB).
+              <strong>Asset Provenance:</strong> Custom procedural 3D anatomical heart mesh (<code className="font-mono text-[11px] px-1 py-0.5 rounded bg-slate-100">heart.glb</code>) synthesized programmatically via Three.js computational geometry script (<code className="font-mono text-[11px] px-1 py-0.5 rounded bg-slate-100">frontend/scripts/generate_heart_model.mjs</code>).
             </p>
             <p>
-              <strong>License:</strong> Creative Commons Attribution 4.0 International (CC-BY 4.0).
+              <strong>License &amp; Rights:</strong> Open-source MIT License under the CardioVision AI repository. No external third-party copyrighted or CC-BY download assets.
             </p>
             <p>
               <strong>Landmark Correspondence:</strong>
-              <br />• LAD: Segmented along the anterior interventricular groove.
-              <br />• LCX: Segmented along the circumflex coronary groove.
-              <br />• RCA: Segmented along the right atrioventricular sulcus.
+              <br />• LAD: Segmented along the anterior interventricular sulcus to the apex.
+              <br />• LCX: Segmented along the left atrioventricular groove to the posterolateral LV wall.
+              <br />• RCA: Segmented along the right atrioventricular sulcus to the crux and posterior descending artery.
             </p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">
-              <strong>Caveat:</strong> The 3D model serves as a cognitive visual reference for perfusion territories. Model probabilities reflect statistical risk correlations derived from the UCI Z-Alizadeh Sani cohort, not direct anatomical measurements or physical plaque imaging.
+            <p className="text-[11px] text-slate-600 italic">
+              <strong>Caveat:</strong> Model outputs represent empirical statistical risk correlations derived from the UCI Z-Alizadeh Sani cohort (≥50% luminal stenosis verified by catheterization), not direct optical or CT plaque reconstruction.
             </p>
           </div>
         </div>

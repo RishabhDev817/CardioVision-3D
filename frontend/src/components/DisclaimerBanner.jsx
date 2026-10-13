@@ -1,21 +1,26 @@
 import React from 'react';
-import { AlertTriangle, ShieldCheck } from 'lucide-react';
+import { ArrowRight, ShieldAlert } from 'lucide-react';
 
-export default function DisclaimerBanner() {
+export default function DisclaimerBanner({ onNavigate }) {
   return (
-    <div className="bg-amber-500/10 border-b border-amber-500/30 text-amber-950 dark:text-amber-200 px-4 py-2 text-xs backdrop-blur-md">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 animate-pulse" />
-          <p className="font-medium leading-relaxed">
-            <strong className="font-semibold text-amber-900 dark:text-amber-100">Research & Educational Decision-Support Prototype.</strong>{' '}
+    <div className="bg-[#FFFBEB] border-b border-[#FEF3C7] text-[#92400E] px-4 py-2 text-xs">
+      <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">
+        <div className="flex items-start sm:items-center gap-2 min-w-0">
+          <ShieldAlert className="w-4 h-4 text-[#D97706] shrink-0 mt-0.5 sm:mt-0" />
+          <p className="font-medium text-[11px] sm:text-xs leading-snug">
+            <span className="font-bold text-[#78350F]">Research &amp; Educational Decision-Support Prototype.</span>{' '}
             Model outputs are estimates for demonstration purposes only and are not medical diagnoses or substitutes for professional evaluation or formal diagnostic imaging.
           </p>
         </div>
-        <div className="hidden md:flex items-center gap-1.5 shrink-0 px-2 py-0.5 rounded bg-amber-500/20 text-[11px] font-mono font-medium text-amber-900 dark:text-amber-100">
-          <ShieldCheck className="w-3 h-3 text-emerald-600" />
-          <span>Target-Leakage Protected</span>
-        </div>
+        {onNavigate && (
+          <button
+            onClick={() => onNavigate('safety')}
+            className="text-[11px] font-semibold text-[#78350F] hover:text-[#451A03] flex items-center gap-1 shrink-0 underline-offset-2 hover:underline transition-colors whitespace-nowrap self-end sm:self-auto cursor-pointer"
+          >
+            <span>Safety Details</span>
+            <ArrowRight className="w-3 h-3" />
+          </button>
+        )}
       </div>
     </div>
   );

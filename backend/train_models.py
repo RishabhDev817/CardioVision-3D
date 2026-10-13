@@ -55,7 +55,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 MODELS_DIR = BASE_DIR / "models"
 DATA_FILE = DATA_DIR / "z_alizadeh_sani_extension.csv"
-LEGACY_DATA_FILE = DATA_DIR / "cad_clinical_data.csv"
+LEGACY_DATA_FILE = DATA_DIR / "archive" / "cad_clinical_data.csv"
 
 # UCI Dataset URL for Z-Alizadeh Sani Extension (Dataset ID: 411)
 UCI_DATASET_ZIP_URL = "https://archive.ics.uci.edu/static/public/411/extention+of+z+alizadeh+sani+dataset.zip"

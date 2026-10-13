@@ -312,7 +312,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173/` in your browser.
+Open `http://localhost:5175/` in your browser (configured with deterministic `strictPort: 5175` to prevent port collisions; API calls are proxied to `http://localhost:8000/api`).
 
 ---
 
@@ -349,7 +349,7 @@ CardioVision-3D/
     ├── vite.config.js                     # Vite configuration
     ├── package.json                       # Frontend dependencies
     ├── public/
-    │   └── models/heart.glb               # High-fidelity 3D human heart mesh
+    │   └── models/heart.glb               # Procedural Three.js 3D human heart mesh (generate_heart_model.mjs)
     └── src/
         ├── App.jsx                        # State orchestration & navigation
         ├── index.css                      # Global styles & design system

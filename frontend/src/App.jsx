@@ -14,11 +14,44 @@ import MethodologySection from './components/MethodologySection';
 import ReportSection from './components/ReportSection';
 import SafetySection from './components/SafetySection';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = '/api';
+
+const getSectionFromUrl = () => {
+  if (typeof window === 'undefined') return 'home';
+  const path = window.location.pathname.toLowerCase().replace(/^\/+|\/+$/g, '');
+  if (path === '3d-anatomy' || path === 'anatomy') return 'anatomy';
+  if (['home', 'assessment', 'analysis', 'explainability', 'performance', 'methodology', 'report', 'safety'].includes(path)) {
+    return path;
+  }
+  const hash = window.location.hash.toLowerCase().replace(/^#\/?/, '');
+  if (hash === '3d-anatomy' || hash === 'anatomy') return 'anatomy';
+  if (['home', 'assessment', 'analysis', 'explainability', 'performance', 'methodology', 'report', 'safety'].includes(hash)) {
+    return hash;
+  }
+  return 'home';
+};
 
 export default function App() {
-  // Navigation State (9 Main Sections)
-  const [activeSection, setActiveSection] = useState('home');
+  // Navigation State with URL & History sync (e.g. /3d-anatomy)
+  const [activeSection, setActiveSectionState] = useState(getSectionFromUrl);
+
+  const setActiveSection = (section) => {
+    setActiveSectionState(section);
+    if (typeof window !== 'undefined') {
+      const targetPath = section === 'anatomy' ? '/3d-anatomy' : section === 'home' ? '/' : `/${section}`;
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState(null, '', targetPath);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setActiveSectionState(getSectionFromUrl());
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Selected Target Vessel for 3D and Inspector
   const [selectedVessel, setSelectedVessel] = useState('LAD');
@@ -39,6 +72,12 @@ export default function App() {
   // Predictions State: null on initial load until live assessment is run
   const [predictionData, setPredictionData] = useState(null);
   const [predictionError, setPredictionError] = useState(null);
+
+  // Permanent hospital-grade light theme: ensure dark class is removed
+  useEffect(() => {
+    document.documentElement.classList.remove('dark');
+    localStorage.removeItem('cardiovision_theme');
+  }, []);
 
   // Fetch metrics, methodology, and features from backend on mount
   useEffect(() => {
@@ -130,18 +169,26 @@ export default function App() {
       console.error('Error calling /predict endpoint:', err);
       // Strictly non-prescriptive: clear prediction state so stale SHAP explanations are not retained
       setPredictionData(null);
-      setPredictionError('Patient-specific explanation unavailable because the model service could not be reached.');
+      let errorMsg = 'Patient-specific explanation unavailable because the model service could not be reached.';
+      if (err.response?.data?.detail) {
+        if (Array.isArray(err.response.data.detail)) {
+          errorMsg = 'Validation Error: ' + err.response.data.detail.map(d => `${d.loc?.slice(-1)[0] || 'field'}: ${d.msg}`).join(', ');
+        } else if (typeof err.response.data.detail === 'string') {
+          errorMsg = err.response.data.detail;
+        }
+      }
+      setPredictionError(errorMsg);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-300">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col font-sans">
       {/* 1. Persistent Visible Clinical Disclaimer */}
-      <DisclaimerBanner />
+      <DisclaimerBanner onNavigate={setActiveSection} />
 
-      {/* 2. Top Header & 9-Tab Navigation */}
+      {/* 2. Top Header & Navigation */}
       <Navbar
         activeSection={activeSection}
         setActiveSection={setActiveSection}
@@ -152,10 +199,11 @@ export default function App() {
 
       {/* 3. Main Workspace Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+
         {predictionError && (
-          <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-300 flex items-center justify-between">
+          <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center justify-between">
             <span>{predictionError}</span>
-            <button onClick={() => setPredictionError(null)} className="font-bold text-sm px-1.5 hover:text-rose-900">×</button>
+            <button onClick={() => setPredictionError(null)} className="font-bold text-sm px-1.5 hover:text-rose-900 cursor-pointer">×</button>
           </div>
         )}
 
@@ -240,22 +288,25 @@ export default function App() {
       </main>
 
       {/* 4. Global Scientific Footer */}
-      <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-6 text-xs text-slate-500">
+      <footer className="border-t border-slate-200 bg-white py-6 text-xs text-slate-500 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-800 dark:text-slate-200">CardioVision AI</span>
+            <span className="font-bold text-slate-900">CardioVision AI</span>
             <span>•</span>
-            <span>AI-Assisted Cardiovascular Decision-Support Prototype</span>
+            <span className="text-slate-600">Cardiovascular AI Research Platform</span>
           </div>
-          <div className="flex items-center gap-4 text-[11px]">
+          <div className="flex items-center gap-4 text-[11px] text-slate-600">
             <span>UCI Dataset ID: 411</span>
             <span>•</span>
-            <span>TreeSHAP Transparent AI</span>
+            <span>TreeSHAP Interpretability</span>
             <span>•</span>
-            <span>Target-Leakage Audited</span>
+            <button onClick={() => setActiveSection('methodology')} className="hover:underline text-[#0D9488] font-medium cursor-pointer">Methodology</button>
+            <span>•</span>
+            <button onClick={() => setActiveSection('safety')} className="hover:underline text-slate-600 cursor-pointer">Safety &amp; Ethics</button>
           </div>
         </div>
       </footer>
     </div>
   );
 }
+
