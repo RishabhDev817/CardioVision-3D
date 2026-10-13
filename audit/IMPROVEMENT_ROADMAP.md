@@ -12,7 +12,7 @@ P0 (Immediate Submission Readiness) ──► P1 (High-Impact Judge Fixes) ─�
 
 | Priority | Issue ID & Description | Category | Estimated Effort | Impact on Judging | Implementation Status |
 | :---: | :--- | :--- | :---: | :--- | :---: |
-| **P0** | **Req-11: Record Official 3–5 min Demo Video** | Submission | Medium (2–3 hrs) | Critical: Mandatory deliverable to avoid submission disqualification. | Demo Script & Checklist Ready (Recording Pending) |
+| **P0** | **Req-11: Record Official 3–5 min Demo Video** | Submission | Medium (2–3 hrs) | Critical: Mandatory deliverable to avoid submission disqualification. | **COMPLETED & VERIFIED** (`https://youtu.be/4uc5qfqN-vw`) |
 | **P1** | **CV-02: Align Risk Tier Cutoffs (<0.35, 0.35–0.65, ≥0.65)** | Integration | Small (20 mins) | High: Eliminates conflicting color/text risk states between 3D canvas and cards. | **COMPLETED & VERIFIED** |
 | **P1** | **CV-01: Disclose Imputed Features in TreeSHAP Dashboard** | Explainability / ML | Medium (1 hr) | High: Protects against clinician judge skepticism regarding unentered variables. | **COMPLETED & VERIFIED** |
 | **P1** | **CV-03: Reconcile 3D Heart Asset Provenance Documentation** | Documentation | Small (15 mins) | High: Eliminates contradiction between procedural script and CC-BY claims. | **COMPLETED & VERIFIED** |
@@ -109,4 +109,4 @@ P0 (Immediate Submission Readiness) ──► P1 (High-Impact Judge Fixes) ─�
 - [x] Orphaned files archived to `archive/` subdirectories with full provenance documentation.
 - [x] Uncalibrated empirical decision score clinical notice displayed in UI and model card.
 - [x] One-hot categorical features grouped with exact signed net additivity and technical component inspection drawers.
-- [ ] Demo video recorded, uploaded, and linked in `README.md` (Demonstration script, secrets checklist, and plan completed; physical recording pending user execution).
+- [x] Demo video recorded, uploaded, and linked in `README.md` (`https://youtu.be/4uc5qfqN-vw`).

@@ -11,6 +11,13 @@ The system combines clinical tabular machine learning with local TreeSHAP explai
 
 ---
 
+## 🎥 Demo Video
+
+Watch the CardioVision AI demonstration:  
+▶️ **[Watch the CardioVision AI Demo on YouTube](https://youtu.be/4uc5qfqN-vw)** (`https://youtu.be/4uc5qfqN-vw`)
+
+---
+
 ## Stenosis Target Definition
 
 In this project, the vessel-level target represents stenosis of **≥50% luminal narrowing**, validated via invasive coronary catheterization angiography:

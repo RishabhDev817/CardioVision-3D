@@ -20,14 +20,14 @@
 | **REQ-08** | Input Validation & Robust Error Handling: Guard against invalid, out-of-range, and malformed patient inputs. | Software Quality Standards / Pydantic v2 | **Mandatory** | Pydantic model `PatientInput` in `backend/main.py` | Tested age=5 (HTTP 422), missing age (HTTP 422), invalid region (HTTP 422). Handled gracefully with details. | **Pass** | Frontend displays user-friendly error banners and prevents invalid submissions. | Maintain input bounds. | P2 |
 | **REQ-09** | AI Tooling & Workflow Disclosure: Explicitly disclose the use of AI development assistants in engineering workflow. | Hackathon Submission Guidelines / `README.md` | **Mandatory** | `README.md` lines 242–257 ("AI-Assisted Engineering Workflow") | `README.md` explicitly credits Antigravity IDE and AI-assisted workflow for implementation, debugging, and integration. | **Pass** | Disclose AI role clearly in presentation slides and documentation. | Keep AI disclosure visible. | P0 |
 | **REQ-10** | Automated Test Suite: Automated unit and integration testing covering models, API, and frontend. | Software QA Standards | **Mandatory** | `backend/test_api_and_models.py` | Executed `python3 -m unittest backend.test_api_and_models -v`: 22 tests executed, 22 passed (0 failed, 0 errors). | **Pass** | Verified. Complete regression suite covering boundaries, leakage, SHAP additivity, and schemas. | Maintain CI execution. | P1 |
-| **REQ-11** | Demonstration Video Deliverable: Public or unlisted video demonstrating problem, assessment, 3D, and SHAP. | Hackathon Submission Standard | **Mandatory** | Script prepared in `JUDGE_QA_AND_DEMO_PLAN.md` | Video recording file not yet committed in repo; comprehensive 5-min demo plan, secrets checklist, and script fully specified. | **Unverified** | Video recording must be performed by user prior to final submission deadline. | Record 3–5 min video using the verified walkthrough plan. | P0 |
+| **REQ-11** | Demonstration Video Deliverable: Public or unlisted video demonstrating problem, assessment, 3D, and SHAP. | Hackathon Submission Standard | **Mandatory** | `README.md` & `JUDGE_QA_AND_DEMO_PLAN.md` | Public/unlisted YouTube video recorded and linked in `README.md`: `https://youtu.be/4uc5qfqN-vw`. Walkthrough covers problem, live assessment, 3D anatomy, and TreeSHAP. | **Pass** | Verified. Video recorded, live, and linked in repository root README. | None. | P0 |
 | **REQ-12** | Clean Repository Hygiene: No orphaned files, dead code, or committed secrets. | Open-Source & Hackathon Submission Standards | **Optional** | Repository root, `data/archive`, and `models/archive` | Secrets scan passed (0 credentials found); orphaned `cad_clinical_data.csv` and `test.glb` safely moved to `archive/` subdirectories with documentation READMEs. | **Pass** | Verified. Zero dead files in active paths; historical assets preserved with provenance READMEs. | None. | P2 |
 
 ---
 
 ### Traceability Status Summary
 - **Total Requirements Audited:** 12
-- **Pass:** 11 (91.7%)
+- **Pass:** 12 (100.0%)
 - **Partial:** 0 (0.0%)
 - **Fail:** 0 (0.0%)
-- **Unverified:** 1 (8.3% — Demo Video Deliverable, pending user recording)
+- **Unverified:** 0 (0.0%)

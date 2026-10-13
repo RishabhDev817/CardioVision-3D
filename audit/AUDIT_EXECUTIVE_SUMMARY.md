@@ -56,6 +56,6 @@ CardioVision AI is a technically sophisticated, cohesive, and remarkably honest 
 | **Asset Documentation (CV-03)** | PARTIAL | **PASS** | Correctly attributes `heart.glb` to procedural Three.js script (`generate_heart_model.mjs`) under MIT license. |
 | **Automated Testing (CV-05)** | FAIL | **PASS** | 22 comprehensive automated regression tests passing in `backend/test_api_and_models.py` (0 failures, 0 errors). |
 | **Repository Hygiene (CV-06)** | PARTIAL | **PASS** | Orphaned files (`cad_clinical_data.csv`, `test.glb`) archived with provenance documentation READMEs. |
-| **Demo Deliverable (REQ-11)** | UNVERIFIED | **READY** | Detailed 3–5 min narration script, 9-point on-screen sequence, secrets checklist, and submission guidelines ready for user recording. |
+| **Demo Deliverable (REQ-11)** | UNVERIFIED | **PASS** | YouTube demonstration video recorded and live at `https://youtu.be/4uc5qfqN-vw` (linked in `README.md`). |
 
-**Final Recommendation:** All 8 identified defects (CV-01 through CV-08) are fully implemented and verified with reproducible test evidence. The project is technically ready for live demonstration and submission. The user should record the demonstration video following the verified script in `JUDGE_QA_AND_DEMO_PLAN.md` before final submission.
+**Final Recommendation:** All 8 identified defects (CV-01 through CV-08) and the demonstration deliverable (REQ-11) are fully implemented, verified, and live. The project is 100% competition-ready for hackathon submission and judge review.

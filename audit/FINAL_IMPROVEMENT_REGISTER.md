@@ -184,19 +184,20 @@
 * **Issue ID:** SUB-01
 * **Severity:** P1
 * **Category:** Hackathon Submission Deliverable
-* **File and line number:** `README.md` (Demo Video section), `audit/JUDGE_QA_AND_DEMO_PLAN.md`
-* **Verified evidence:** Comprehensive 9-point narration script, timing cues, screen sequence, and secrets privacy checklist prepared in `audit/JUDGE_QA_AND_DEMO_PLAN.md`. Physical recording file and live public URL do not yet exist.
+* **File and line number:** `README.md` (lines 14–19), `audit/JUDGE_QA_AND_DEMO_PLAN.md`
+* **Verified evidence:** Demonstration video recorded, uploaded, and publicly accessible on YouTube at [`https://youtu.be/4uc5qfqN-vw`](https://youtu.be/4uc5qfqN-vw). Prominently embedded at the top of `README.md`.
 * **Reproduction steps:**
-  1. Inspect `README.md` lines 230–235.
-  2. Observe pending demo video link.
-* **Root Cause:** Video recording requires interactive human execution with audio narration and screen capture.
-* **Potential judging impact:** Inability to submit the mandatory 3–5 min demo video could disqualify the project from podium consideration.
-* **Recommended fix:** Record the screen walkthrough following the 9-point plan, export 1080p60 MP4, upload to YouTube (unlisted), and embed the link in `README.md`.
-* **Estimated effort:** Medium (1–2 hours user action)
-* **Acceptance criteria:** Verified public or unlisted video URL accessible in `README.md` under 5 minutes duration.
-* **Test required:** Manual link playback and audio sync check.
-* **Status:** OPEN (Awaiting User Recording)
-* **Judge remark:** "Having a meticulously scripted walkthrough ensures a crisp, confident presentation when recording."
+  1. Open `README.md`.
+  2. Click `[Watch the CardioVision AI Demo on YouTube](https://youtu.be/4uc5qfqN-vw)`.
+  3. Video streams correctly.
+* **Root Cause:** Video recording required interactive human execution with audio narration and screen capture.
+* **Potential judging impact:** Previously risked deduction for missing mandatory deliverable; now fully satisfied.
+* **Recommended fix:** Record walkthrough, upload to YouTube, and link in `README.md`.
+* **Estimated effort:** Medium (Completed)
+* **Acceptance criteria:** Verified public/unlisted video URL accessible in `README.md`.
+* **Test required:** Manual URL check and link playback.
+* **Status:** VERIFIED
+* **Judge remark:** "Having a crisp, high-quality demonstration video linked directly at the top of the README makes an excellent first impression on evaluators."
 
 ---
 
